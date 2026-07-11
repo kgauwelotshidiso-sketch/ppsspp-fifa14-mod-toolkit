@@ -268,7 +268,7 @@ public final class BackupEngine {
             StringBuilder manifest = new StringBuilder();
             manifest.append("PPSSPP Mod Toolkit verified backup\n");
             manifest.append("manifest_version=1\n");
-            manifest.append("toolkit_phase=1B\n");
+            manifest.append("toolkit_phase=1C\n");
             manifest.append("created_utc=").append(utcTimestamp()).append('\n');
             manifest.append("verification=SHA-256\n");
 
@@ -554,7 +554,7 @@ public final class BackupEngine {
             StringBuilder manifest = new StringBuilder();
             manifest.append("PPSSPP Mod Toolkit workspace\n");
             manifest.append("manifest_version=1\n");
-            manifest.append("toolkit_phase=1B\n");
+            manifest.append("toolkit_phase=1C\n");
             manifest.append("state=PREPARED_NOT_EXTRACTED\n");
             manifest.append("created_utc=").append(utcTimestamp()).append('\n');
             manifest.append("source_type=").append(sourceType).append('\n');
@@ -588,12 +588,12 @@ public final class BackupEngine {
             }
             details.add("Verified backup linked: " + verifiedBackupReference);
             details.add("Workspace state: prepared, not extracted");
-            details.add("Game replacement remains disabled in Phase 1B");
+            details.add("Game replacement remains disabled until Phase 1D");
 
             ScanReport report = new ScanReport(
                     "Workspace preparation",
                     "Workspace prepared",
-                    "A controlled folder structure and manifest were created for the next extraction sprint.",
+                    "A controlled folder structure and manifest were created for Phase 1C extraction.",
                     details,
                     new ArrayList<>()
             );

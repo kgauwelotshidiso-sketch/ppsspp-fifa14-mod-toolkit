@@ -1,50 +1,39 @@
-# PPSSPP Mod Toolkit — Phase 1B
+# PPSSPP Mod Toolkit — Phase 1C
 
 A native Android toolkit for Android-only PSP game modding, initially focused on FIFA 14 PSP/PPSSPP.
 
-## Working features
+## Phase 1C working features
 
-### Source scanner retained from Phase 1A
-- Select an ISO, CSO, ZSO, PBP, or extracted PSP game folder through Android's system picker.
-- Persist source access without broad storage permission.
-- Confirm FIFA 14 from internal title IDs and PSP structure markers.
-- Discover likely modding assets such as `fifa.db`, `.big`, `.bh`, `.rx3`, `.fsh`, `.loc`, and configuration files.
-- Inspect patch ZIPs and reject unsafe archive paths.
-
-### Phase 1B verified backup
-- Select a writable backup destination using Android's Storage Access Framework.
-- Perform a real write test before backup.
-- Measure free space where the document provider exposes it.
-- Copy the complete selected game image or extracted game folder.
-- Calculate SHA-256 while reading each source file.
-- Reopen each destination file and calculate SHA-256 again.
-- Reject and clean up incomplete backups when size or hash verification fails.
-- Create a timestamped backup directory and `verification_manifest.txt`.
-- Never modify the selected source.
-
-### Controlled workspace preparation
-- Require a verified backup record first.
-- Check measurable free space against an extraction/rebuild recommendation.
-- Create isolated folders for backup reference, extracted originals, working files, patch imports, rebuilt output, and logs.
-- Create `workspace_manifest.txt` with state `PREPARED_NOT_EXTRACTED`.
-- Keep replacement and ISO/CSO rebuilding disabled until the extraction engine is added.
-
-## Stable development signing
-
-Phase 1B introduces a repository development keystore so APKs built from this project use a stable debug signature. This key is intentionally for development only and must never be used for a production store release.
-
-Because Phase 1A used GitHub runner-generated debug signing, the first Phase 1B installation may require uninstalling Phase 1A once. Phase 1B and later development APKs can then install as updates as long as this keystore is retained.
+- Keeps the Phase 1A source scanner and patch ZIP safety inspection.
+- Keeps Phase 1B full-source backup, SHA-256 verification, storage checks, and controlled workspace creation.
+- Reads uncompressed ISO-9660 and Joliet filesystems directly from the selected Android document URI.
+- Extracts the complete ISO filesystem into `10_extracted_original/source_original` without changing the ISO.
+- Supports an already-extracted source folder as an alternative source.
+- Preserves exact internal paths and refuses unsafe, duplicate, malformed, out-of-range, or multi-extent records.
+- Hashes every source file while writing it, reopens the extracted file, hashes it again, and requires a size/SHA-256 match.
+- Creates:
+  - `90_logs/extraction_manifest.csv`
+  - `90_logs/extraction_hashes.tsv`
+  - `90_logs/asset_index.csv`
+  - `90_logs/extraction_summary.txt`
+- Indexes exact paths for likely modding assets such as `fifa.db`, `.big`, `.bh`, `.rx3`, `.fsh`, `.loc`, and configuration files.
+- Creates a complete second copy at `20_working_files/source_working`.
+- Revalidates the protected original against its saved hash manifest while making the working copy.
+- Reopens and hashes every working file before marking the working copy ready.
+- Keeps full-file replacement disabled until Phase 1D.
 
 ## Safety boundary
 
-The game source is always opened read-only. Phase 1B writes only inside the backup and workspace folders explicitly selected by the user. It does not patch, replace, rebuild, or overwrite files inside an ISO/CSO.
+Phase 1C only opens the selected source and verified backup read-only. It writes inside the backup/workspace folders selected by the user. Failed extraction or working-copy operations request cleanup of only the app-created incomplete folders and logs.
+
+Compressed CSO/ZSO/DAX and PBP extraction are deliberately rejected in Phase 1C. Source scanning and backup still recognize them, but controlled extraction currently requires an uncompressed ISO or an extracted game folder.
 
 ## Build through GitHub Actions
 
-1. Replace the project files with the Phase 1B package.
+1. Put these files in the root of the repository.
 2. Commit and push to `main` or `master`.
 3. Open **Actions** and select **Build Android Debug APK**.
-4. Wait for tests, lint, and APK compilation to receive a green tick.
-5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1B-debug`.
+4. Wait for the green tick.
+5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1C-debug`.
 
 Do not install an APK from a failed or cancelled workflow.

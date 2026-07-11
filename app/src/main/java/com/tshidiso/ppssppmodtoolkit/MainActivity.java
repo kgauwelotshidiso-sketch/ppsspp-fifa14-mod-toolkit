@@ -52,6 +52,8 @@ public final class MainActivity extends Activity {
     private TextView latestBackupStatusView;
     private TextView workspaceStatusView;
     private TextView latestWorkspaceStatusView;
+    private TextView extractionStatusView;
+    private TextView workingCopyStatusView;
     private TextView patchStatusView;
     private TextView operationStatusView;
     private TextView reportView;
@@ -64,6 +66,9 @@ public final class MainActivity extends Activity {
     private Button createBackupButton;
     private Button chooseWorkspaceFolderButton;
     private Button prepareWorkspaceButton;
+    private Button checkExtractionButton;
+    private Button extractOriginalButton;
+    private Button createWorkingCopyButton;
     private Button choosePatchButton;
     private Button scanPatchButton;
     private Button resetButton;
@@ -113,7 +118,7 @@ public final class MainActivity extends Activity {
         });
 
         TextView badge = textView(
-                "PHASE 1B  •  VERIFIED BACKUP & WORKSPACE",
+                "PHASE 1C  •  EXTRACTION & ASSET INDEX",
                 12,
                 COLOR_PRIMARY,
                 Typeface.BOLD
@@ -130,7 +135,7 @@ public final class MainActivity extends Activity {
         root.addView(title, titleParams);
 
         TextView subtitle = textView(
-                "FIFA 14 PSP source scanning, SHA-256 verified backups, storage checks, and controlled modding workspaces.",
+                "FIFA 14 PSP source scanning, verified backups, controlled ISO extraction, exact asset indexing, and protected working copies.",
                 15,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -194,7 +199,7 @@ public final class MainActivity extends Activity {
         LinearLayout workspaceCard = createCard();
         workspaceCard.addView(sectionTitle("3. Prepare the controlled workspace"));
         workspaceCard.addView(sectionBody(
-                "A verified backup is mandatory. The app checks workspace storage and creates separate original, working, patch-import, rebuilt-output, and log folders. Source extraction is deliberately reserved for the next sprint."
+                "A verified backup is mandatory. The app checks workspace storage and creates separate protected-original, working, patch-import, rebuilt-output, and log areas."
         ));
 
         workspaceStatusView = statusPanel();
@@ -213,10 +218,36 @@ public final class MainActivity extends Activity {
 
         root.addView(workspaceCard, cardParams());
 
+        LinearLayout extractionCard = createCard();
+        extractionCard.addView(sectionTitle("4. Extract, index, and verify the game filesystem"));
+        extractionCard.addView(sectionBody(
+                "The app reads the ISO filesystem without changing it, extracts every file into the protected original area, records exact internal paths and SHA-256 hashes, then can create a second verified working copy."
+        ));
+
+        extractionStatusView = statusPanel();
+        extractionCard.addView(extractionStatusView, statusPanelParams());
+
+        workingCopyStatusView = statusPanel();
+        extractionCard.addView(workingCopyStatusView, secondaryStatusPanelParams());
+
+        checkExtractionButton = actionButton("Check extraction readiness", false);
+        checkExtractionButton.setOnClickListener(view -> runExtractionReadinessCheck());
+        extractionCard.addView(checkExtractionButton, buttonParams());
+
+        extractOriginalButton = actionButton("Extract and verify protected original", true);
+        extractOriginalButton.setOnClickListener(view -> runExtractOriginal());
+        extractionCard.addView(extractOriginalButton, primaryButtonParams());
+
+        createWorkingCopyButton = actionButton("Create verified working copy", true);
+        createWorkingCopyButton.setOnClickListener(view -> runCreateWorkingCopy());
+        extractionCard.addView(createWorkingCopyButton, primaryButtonParams());
+
+        root.addView(extractionCard, cardParams());
+
         LinearLayout patchCard = createCard();
-        patchCard.addView(sectionTitle("4. Inspect a mod patch ZIP"));
+        patchCard.addView(sectionTitle("5. Inspect a mod patch ZIP"));
         patchCard.addView(sectionBody(
-                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Patch installation remains disabled in Phase 1B."
+                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Patch installation remains disabled in Phase 1C."
         ));
 
         patchStatusView = statusPanel();
@@ -247,7 +278,7 @@ public final class MainActivity extends Activity {
         reportCard.addView(operationStatusView, operationParams);
 
         reportView = textView(
-                "No Phase 1B operation has been run yet.",
+                "No Phase 1C operation has been run yet.",
                 14,
                 COLOR_TEXT,
                 Typeface.NORMAL
@@ -267,7 +298,7 @@ public final class MainActivity extends Activity {
         root.addView(reportCard, cardParams());
 
         TextView footer = textView(
-                "Phase 1B may write only inside the backup and workspace folders you choose. It never edits the selected game source and does not yet replace files inside an ISO/CSO.",
+                "Phase 1C writes only inside the chosen backup/workspace folders. It never edits the selected source or verified backup. Full-file replacement remains disabled until Phase 1D.",
                 12,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -380,13 +411,20 @@ public final class MainActivity extends Activity {
             reportView.setText("Backup destination selected. Run the readiness check before copying.");
             operationStatusView.setText("Backup destination selected.");
         } else if (requestCode == REQUEST_WORKSPACE_FOLDER) {
-            if (!urisEqual(workspaceTreeUri, selectedUri)) {
+            boolean destinationChanged = !urisEqual(workspaceTreeUri, selectedUri);
+            if (destinationChanged) {
                 releaseReadWritePermission(workspaceTreeUri);
             }
             workspaceTreeUri = selectedUri;
             SelectionStore.saveWorkspaceTreeUri(this, workspaceTreeUri);
-            reportView.setText("Workspace destination selected. A verified backup is still required before preparation.");
-            operationStatusView.setText("Workspace destination selected.");
+            if (destinationChanged) {
+                SelectionStore.clearLatestWorkspace(this);
+                SelectionStore.clearPhase1CRecords(this);
+            }
+            reportView.setText("Workspace destination selected. Prepare a workspace before extraction.");
+            operationStatusView.setText(destinationChanged
+                    ? "Workspace destination changed — prepare a new workspace."
+                    : "The same workspace destination was reselected.");
         }
 
         updateSelectionViews();
@@ -517,7 +555,7 @@ public final class MainActivity extends Activity {
                     selectedFile,
                     selectedFolder,
                     selectedBackupTree,
-                    this::showBackupProgress
+                    this::showOperationProgress
             );
 
             runOnUiThread(() -> {
@@ -531,6 +569,7 @@ public final class MainActivity extends Activity {
                             result.getReference()
                     );
                     SelectionStore.clearLatestWorkspace(this);
+                    SelectionStore.clearPhase1CRecords(this);
                 }
                 reportView.setText(result.getReport().toDisplayText());
                 setBusy(false, result.isSuccess()
@@ -582,11 +621,150 @@ public final class MainActivity extends Activity {
                             result.getCreatedUri(),
                             result.getReference()
                     );
+                    SelectionStore.clearPhase1CRecords(this);
                 }
                 reportView.setText(result.getReport().toDisplayText());
                 setBusy(false, result.isSuccess()
                         ? "Workspace prepared."
                         : "Workspace preparation stopped safely.");
+                updateSelectionViews();
+            });
+        });
+    }
+
+    private void runExtractionReadinessCheck() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String backupReference = SelectionStore.loadLatestBackupReference(this);
+        if (!hasSource()) {
+            showToast("Choose the game source first.");
+            return;
+        }
+        if (workspaceProject == null) {
+            showToast("Prepare a workspace before checking extraction readiness.");
+            return;
+        }
+        if (backupReference == null || backupReference.trim().isEmpty()) {
+            showToast("Create a verified backup first.");
+            return;
+        }
+
+        final Uri selectedFile = gameFileUri;
+        final Uri selectedFolder = gameFolderUri;
+        final Uri selectedWorkspace = workspaceProject;
+        final String selectedBackupReference = backupReference;
+        setBusy(true, "Reading the ISO filesystem and checking workspace capacity…");
+
+        operationExecutor.execute(() -> {
+            ScanReport report = ExtractionEngine.checkExtractionReadiness(
+                    getApplicationContext(),
+                    selectedFile,
+                    selectedFolder,
+                    selectedWorkspace,
+                    selectedBackupReference
+            );
+            finishReport(report, "Extraction readiness check complete.");
+        });
+    }
+
+    private void runExtractOriginal() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String backupReference = SelectionStore.loadLatestBackupReference(this);
+        if (!hasSource()) {
+            showToast("Choose the game source first.");
+            return;
+        }
+        if (workspaceProject == null) {
+            showToast("Prepare a workspace before extraction.");
+            return;
+        }
+        if (backupReference == null || backupReference.trim().isEmpty()) {
+            showToast("Create a verified backup first.");
+            return;
+        }
+
+        final Uri selectedFile = gameFileUri;
+        final Uri selectedFolder = gameFolderUri;
+        final Uri selectedWorkspace = workspaceProject;
+        final String selectedBackupReference = backupReference;
+        setBusy(true, "Extracting and verifying every file. Keep the app open and the phone charged…");
+
+        operationExecutor.execute(() -> {
+            OperationResult result = ExtractionEngine.extractOriginal(
+                    getApplicationContext(),
+                    selectedFile,
+                    selectedFolder,
+                    selectedWorkspace,
+                    selectedBackupReference,
+                    this::showOperationProgress
+            );
+
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                if (result.isSuccess()) {
+                    SelectionStore.saveLatestExtraction(
+                            this,
+                            result.getCreatedUri(),
+                            result.getReference()
+                    );
+                    SelectionStore.clearLatestWorkingCopy(this);
+                }
+                reportView.setText(result.getReport().toDisplayText());
+                setBusy(false, result.isSuccess()
+                        ? "Protected original extraction verified."
+                        : "Extraction stopped safely.");
+                updateSelectionViews();
+            });
+        });
+    }
+
+    private void runCreateWorkingCopy() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String backupReference = SelectionStore.loadLatestBackupReference(this);
+        String extractionReference = SelectionStore.loadLatestExtractionReference(this);
+        if (workspaceProject == null) {
+            showToast("Prepare a workspace first.");
+            return;
+        }
+        if (backupReference == null || backupReference.trim().isEmpty()) {
+            showToast("Create a verified backup first.");
+            return;
+        }
+        if (extractionReference == null || extractionReference.trim().isEmpty()) {
+            showToast("Extract and verify the protected original first.");
+            return;
+        }
+
+        final Uri selectedWorkspace = workspaceProject;
+        final String selectedBackupReference = backupReference;
+        final String selectedExtractionReference = extractionReference;
+        setBusy(true, "Creating and verifying the complete working copy…");
+
+        operationExecutor.execute(() -> {
+            OperationResult result = ExtractionEngine.createVerifiedWorkingCopy(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    selectedBackupReference,
+                    selectedExtractionReference,
+                    this::showOperationProgress
+            );
+
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                if (result.isSuccess()) {
+                    SelectionStore.saveLatestWorkingCopy(
+                            this,
+                            result.getCreatedUri(),
+                            result.getReference()
+                    );
+                }
+                reportView.setText(result.getReport().toDisplayText());
+                setBusy(false, result.isSuccess()
+                        ? "Verified working copy ready."
+                        : "Working copy stopped safely.");
                 updateSelectionViews();
             });
         });
@@ -621,7 +799,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void showBackupProgress(String stage, long completedBytes, long totalBytes) {
+    private void showOperationProgress(String stage, long completedBytes, long totalBytes) {
         runOnUiThread(() -> {
             if (isActivityUnavailable()) {
                 return;
@@ -647,6 +825,7 @@ public final class MainActivity extends Activity {
     private void clearSourceDependentRecords() {
         SelectionStore.clearLatestVerifiedBackup(this);
         SelectionStore.clearLatestWorkspace(this);
+        SelectionStore.clearPhase1CRecords(this);
     }
 
     private void resetSelections() {
@@ -711,6 +890,20 @@ public final class MainActivity extends Activity {
                         : "Latest prepared workspace\n" + workspaceReference
         );
 
+        String extractionReference = SelectionStore.loadLatestExtractionReference(this);
+        extractionStatusView.setText(
+                extractionReference == null || extractionReference.trim().isEmpty()
+                        ? "Protected original extraction: none"
+                        : "Latest protected original\n" + extractionReference
+        );
+
+        String workingReference = SelectionStore.loadLatestWorkingReference(this);
+        workingCopyStatusView.setText(
+                workingReference == null || workingReference.trim().isEmpty()
+                        ? "Verified working copy: none"
+                        : "Latest verified working copy\n" + workingReference
+        );
+
         if (patchZipUri != null) {
             patchStatusView.setText(
                     "Selected patch package\n" + GameScanner.describeUri(this, patchZipUri)
@@ -723,6 +916,9 @@ public final class MainActivity extends Activity {
         boolean hasBackupDestination = backupTreeUri != null;
         boolean hasWorkspaceDestination = workspaceTreeUri != null;
         boolean hasVerifiedBackup = backupReference != null && !backupReference.trim().isEmpty();
+        boolean hasPreparedWorkspace = workspaceReference != null && !workspaceReference.trim().isEmpty()
+                && SelectionStore.loadLatestWorkspaceUri(this) != null;
+        boolean hasExtraction = extractionReference != null && !extractionReference.trim().isEmpty();
 
         scanSourceButton.setEnabled(hasSource);
         checkBackupButton.setEnabled(hasSource && hasBackupDestination);
@@ -730,6 +926,9 @@ public final class MainActivity extends Activity {
         prepareWorkspaceButton.setEnabled(
                 hasSource && hasWorkspaceDestination && hasVerifiedBackup
         );
+        checkExtractionButton.setEnabled(hasSource && hasVerifiedBackup && hasPreparedWorkspace);
+        extractOriginalButton.setEnabled(hasSource && hasVerifiedBackup && hasPreparedWorkspace);
+        createWorkingCopyButton.setEnabled(hasVerifiedBackup && hasPreparedWorkspace && hasExtraction);
         scanPatchButton.setEnabled(patchZipUri != null);
     }
 
@@ -764,6 +963,9 @@ public final class MainActivity extends Activity {
             checkBackupButton.setEnabled(false);
             createBackupButton.setEnabled(false);
             prepareWorkspaceButton.setEnabled(false);
+            checkExtractionButton.setEnabled(false);
+            extractOriginalButton.setEnabled(false);
+            createWorkingCopyButton.setEnabled(false);
             scanPatchButton.setEnabled(false);
         } else {
             updateSelectionViews();

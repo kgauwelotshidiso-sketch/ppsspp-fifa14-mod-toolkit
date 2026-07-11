@@ -15,6 +15,10 @@ public final class SelectionStore {
     private static final String KEY_LATEST_BACKUP_REFERENCE = "latest_backup_reference";
     private static final String KEY_LATEST_WORKSPACE_URI = "latest_workspace_uri";
     private static final String KEY_LATEST_WORKSPACE_REFERENCE = "latest_workspace_reference";
+    private static final String KEY_LATEST_EXTRACTION_URI = "latest_extraction_uri";
+    private static final String KEY_LATEST_EXTRACTION_REFERENCE = "latest_extraction_reference";
+    private static final String KEY_LATEST_WORKING_URI = "latest_working_uri";
+    private static final String KEY_LATEST_WORKING_REFERENCE = "latest_working_reference";
 
     private SelectionStore() {
     }
@@ -100,6 +104,59 @@ public final class SelectionStore {
         prefs(context).edit()
                 .remove(KEY_LATEST_WORKSPACE_URI)
                 .remove(KEY_LATEST_WORKSPACE_REFERENCE)
+                .apply();
+    }
+
+    public static void saveLatestExtraction(Context context, Uri uri, String reference) {
+        SharedPreferences.Editor editor = prefs(context).edit();
+        putUri(editor, KEY_LATEST_EXTRACTION_URI, uri);
+        putString(editor, KEY_LATEST_EXTRACTION_REFERENCE, reference);
+        editor.apply();
+    }
+
+    public static Uri loadLatestExtractionUri(Context context) {
+        return loadUri(context, KEY_LATEST_EXTRACTION_URI);
+    }
+
+    public static String loadLatestExtractionReference(Context context) {
+        return prefs(context).getString(KEY_LATEST_EXTRACTION_REFERENCE, "");
+    }
+
+    public static void clearLatestExtraction(Context context) {
+        prefs(context).edit()
+                .remove(KEY_LATEST_EXTRACTION_URI)
+                .remove(KEY_LATEST_EXTRACTION_REFERENCE)
+                .apply();
+    }
+
+    public static void saveLatestWorkingCopy(Context context, Uri uri, String reference) {
+        SharedPreferences.Editor editor = prefs(context).edit();
+        putUri(editor, KEY_LATEST_WORKING_URI, uri);
+        putString(editor, KEY_LATEST_WORKING_REFERENCE, reference);
+        editor.apply();
+    }
+
+    public static Uri loadLatestWorkingUri(Context context) {
+        return loadUri(context, KEY_LATEST_WORKING_URI);
+    }
+
+    public static String loadLatestWorkingReference(Context context) {
+        return prefs(context).getString(KEY_LATEST_WORKING_REFERENCE, "");
+    }
+
+    public static void clearLatestWorkingCopy(Context context) {
+        prefs(context).edit()
+                .remove(KEY_LATEST_WORKING_URI)
+                .remove(KEY_LATEST_WORKING_REFERENCE)
+                .apply();
+    }
+
+    public static void clearPhase1CRecords(Context context) {
+        prefs(context).edit()
+                .remove(KEY_LATEST_EXTRACTION_URI)
+                .remove(KEY_LATEST_EXTRACTION_REFERENCE)
+                .remove(KEY_LATEST_WORKING_URI)
+                .remove(KEY_LATEST_WORKING_REFERENCE)
                 .apply();
     }
 
