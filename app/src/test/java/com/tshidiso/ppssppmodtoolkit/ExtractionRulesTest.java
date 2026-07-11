@@ -17,6 +17,14 @@ public final class ExtractionRulesTest {
     }
 
     @Test
+    public void exactNameMimeDoesNotInviteProviderExtensionChanges() {
+        assertEquals(
+                "application/octet-stream",
+                ExtractionRules.exactNameMimeType()
+        );
+    }
+
+    @Test
     public void csvEscapesCommasQuotesAndNewlines() {
         assertEquals("plain", ExtractionRules.csv("plain"));
         assertEquals("\"a,b\"", ExtractionRules.csv("a,b"));

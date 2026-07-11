@@ -10,8 +10,8 @@ android {
         applicationId = "com.tshidiso.ppssppmodtoolkit"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0-phase1c"
+        versionCode = 4
+        versionName = "0.3.1-phase1c-hotfix1"
     }
 
     signingConfigs {

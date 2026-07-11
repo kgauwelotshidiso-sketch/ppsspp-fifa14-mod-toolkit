@@ -645,7 +645,6 @@ public final class ExtractionEngine {
                 Uri target = createFileExact(
                         resolver,
                         parent,
-                        mimeForName(entry.getName()),
                         entry.getName()
                 );
                 FileVerification verification = copyIsoExtentAndVerify(
@@ -730,7 +729,6 @@ public final class ExtractionEngine {
             Uri target = createFileExact(
                     resolver,
                     parent,
-                    safeMime(entry.mimeType, entry.name),
                     entry.name
             );
             FileVerification verification = copyDocumentAndVerify(
@@ -818,7 +816,6 @@ public final class ExtractionEngine {
             Uri target = createFileExact(
                     resolver,
                     parent,
-                    safeMime(entry.mimeType, entry.name),
                     entry.name
             );
             FileVerification verification = copyDocumentAndVerify(
@@ -1502,7 +1499,6 @@ public final class ExtractionEngine {
             probe = createFileExact(
                     resolver,
                     parentUri,
-                    "application/octet-stream",
                     ".ppsspp_phase1c_probe_" + System.currentTimeMillis() + ".tmp"
             );
             try (OutputStream output = resolver.openOutputStream(probe, "w")) {
@@ -1600,7 +1596,6 @@ public final class ExtractionEngine {
     private static Uri createFileExact(
             ContentResolver resolver,
             Uri parentUri,
-            String mimeType,
             String name
     ) throws IOException {
         if (findChild(resolver, parentUri, name) != null) {
@@ -1609,7 +1604,7 @@ public final class ExtractionEngine {
         Uri created = DocumentsContract.createDocument(
                 resolver,
                 parentUri,
-                mimeType,
+                ExtractionRules.exactNameMimeType(),
                 name
         );
         if (created == null) {
@@ -1634,7 +1629,7 @@ public final class ExtractionEngine {
         if (existing != null) {
             deleteDocument(resolver, existing);
         }
-        Uri file = createFileExact(resolver, parentUri, "text/plain", name);
+        Uri file = createFileExact(resolver, parentUri, name);
         try (OutputStream output = resolver.openOutputStream(file, "w")) {
             if (output == null) {
                 throw new IOException("Android returned no output stream for " + name);
@@ -1794,23 +1789,6 @@ public final class ExtractionEngine {
                 throw new IOException("Source folder contains a NUL character");
             }
         }
-    }
-
-    private static String mimeForName(String name) {
-        String lower = name.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".txt") || lower.endsWith(".csv") || lower.endsWith(".ini")
-                || lower.endsWith(".xml") || lower.endsWith(".loc")) {
-            return "text/plain";
-        }
-        return "application/octet-stream";
-    }
-
-    private static String safeMime(String mimeType, String name) {
-        if (mimeType == null || mimeType.trim().isEmpty()
-                || DocumentsContract.Document.MIME_TYPE_DIR.equals(mimeType)) {
-            return mimeForName(name);
-        }
-        return mimeType;
     }
 
     private static String parentPath(String path) {

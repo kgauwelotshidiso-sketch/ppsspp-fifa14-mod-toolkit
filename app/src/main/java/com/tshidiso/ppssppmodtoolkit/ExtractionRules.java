@@ -26,6 +26,13 @@ public final class ExtractionRules {
         return availableBytes < 0L || requiredBytes < 0L || availableBytes >= requiredBytes;
     }
 
+    static String exactNameMimeType() {
+        // Some Android document providers append an extension based on MIME type.
+        // application/octet-stream has no preferred extension, so the ISO filename
+        // can be preserved exactly (for example, disc.ini must not become disc.ini.txt).
+        return "application/octet-stream";
+    }
+
     static String csv(String value) {
         String safe = value == null ? "" : value;
         if (safe.indexOf(',') < 0
