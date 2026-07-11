@@ -588,7 +588,7 @@ public final class BackupEngine {
             }
             details.add("Verified backup linked: " + verifiedBackupReference);
             details.add("Workspace state: prepared, not extracted");
-            details.add("Game replacement remains disabled until Phase 1D");
+            details.add("Game replacement stays disabled until a verified working copy and exact target are ready");
 
             ScanReport report = new ScanReport(
                     "Workspace preparation",

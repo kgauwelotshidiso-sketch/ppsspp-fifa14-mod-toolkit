@@ -1,77 +1,85 @@
-# PPSSPP Mod Toolkit — Phase 1D
+# PPSSPP Mod Toolkit — Phase 1E
 
 A native Android toolkit for Android-only PSP game modding, initially focused on FIFA 14 PSP/PPSSPP.
 
-## Phase 1D working features
+## Phase 1E working features
 
-Phase 1D keeps all Phase 1A–1C source scanning, ZIP inspection, verified backup, workspace, ISO extraction, exact-path indexing, and verified working-copy features. It adds the first controlled full-file replacement workflow.
+Phase 1E keeps all Phase 1A–1D source scanning, verified backup, controlled workspace, ISO extraction, exact-path indexing, verified working copy, staged full-file replacement, and rollback features. It adds a conservative FIFA database lab for the selected `.db` working asset.
 
-### Searchable working asset browser
+### Verified database inspection
 
-- Reads `90_logs/working_asset_index.csv` from the verified working copy.
-- Searches by ordinary path text or structured filters:
-  - `ext:db`
-  - `name:fifa`
-  - `path:data`
-  - `type:database`
-  - `min:1MB`
-  - `max:20MB`
-- Displays exact internal path, category, size, and SHA-256.
-- Prioritizes `fifa.db`, other databases, `.bh`, `.big`, graphics/model assets, and localization files.
-
-### Verified replacement staging
-
-- Requires the replacement filename to exactly match the selected working asset filename.
-- Re-hashes the selected working target and rejects a stale asset-index selection.
-- Hashes the replacement before copying it.
-- Measures workspace free space and reserves room for staging, rollback, and a safety margin.
-- Copies the replacement into:
+- Requires a selected `.db` asset such as:
 
 ```text
-30_patch_import/phase1d_staging/<transaction_id>/replacement/
+PSP_GAME/USRDIR/data/cmn/fifa.db
 ```
 
-- Reopens the staged file and requires a size/SHA-256 match.
-- Does not change the working file during validation.
-
-### Controlled full-file replacement
-
-- Revalidates the staged replacement and current working target.
-- Creates and verifies a complete pre-replacement rollback copy at:
-
-```text
-30_patch_import/phase1d_staging/<transaction_id>/rollback_original/<exact_internal_path>
-```
-
-- Replaces only the selected exact path inside:
+- Resolves the exact file only inside:
 
 ```text
 20_working_files/source_working
 ```
 
-- Reopens and hashes the applied file.
-- Updates:
-  - `90_logs/working_manifest.csv`
-  - `90_logs/working_hashes.tsv`
-  - `90_logs/working_asset_index.csv`
-  - `90_logs/replacement_history.csv`
-  - `90_logs/latest_replacement.txt`
-- Records a transaction manifest beside the staged and rollback files.
-- Attempts an immediate verified restore if an apply operation fails after the target is touched.
+- Rechecks the file size and SHA-256 against the current working asset index before every operation.
+- Detects SQLite 3 headers, known FIFA table-name markers, mostly-text files, and unknown binary formats without guessing a decoded schema.
+- Reports:
+  - exact path
+  - file size
+  - SHA-256
+  - format fingerprint
+  - printable-string count
+  - known table-name markers
+  - first little-endian and big-endian 32-bit values
+  - first 64 header bytes in hexadecimal
 
-### LIFO rollback
+### Exact database text search
 
-- Rolls back the most recently applied replacement first.
-- Verifies that the current target still matches the applied transaction before restoring anything.
-- Revalidates the rollback original, restores it, reopens it, and checks SHA-256.
-- Restores all working manifests to the pre-replacement size/hash.
-- Keeps a stack of applied transactions so repeated replacements can be rolled back in reverse order.
+- Searches exact case-sensitive UTF-8 byte sequences.
+- Reports total occurrences.
+- Reports up to 50 byte offsets in decimal and hexadecimal.
+- Shows printable context around each occurrence.
+- Never changes the database during inspection or search.
 
-## Safety boundary
+### Same-length database edit builder
 
-Phase 1D never writes to the selected ISO/CSO/PBP, verified backup, or `10_extracted_original/source_original`. It modifies only the exact selected file inside the verified working copy. Staging and rollback files remain inside the app-created workspace.
+- Accepts:
+  - exact find text
+  - replacement text
+  - occurrence number
+- Requires find and replacement text to use exactly the same number of UTF-8 bytes.
+- Rejects empty text, identical replacements, line breaks, NUL bytes, missing matches, and invalid occurrence numbers.
+- Replaces only the selected occurrence in memory.
+- Creates a complete edited database copy at:
 
-Phase 1D does not rebuild an ISO yet. ISO rebuild and output verification are reserved for the next phase.
+```text
+30_patch_import/phase1e_database_edits/<edit_id>/<exact_database_filename>
+```
+
+- Reopens and SHA-256 verifies the generated database copy.
+- Writes `database_edit_manifest.txt` beside it with the target path, byte offset, occurrence number, old hash, new hash, and Base64URL-encoded text values.
+- Leaves the working database unchanged while the edited copy is being built.
+
+### Automatic Phase 1D staging
+
+After the edited database copy is verified, Phase 1E automatically sends it through the existing Phase 1D replacement validator:
+
+- exact filename check
+- stale-target size/hash check
+- workspace-space check
+- staged-copy SHA-256 verification
+- rollback-copy requirement before apply
+
+The user must still review the operation report and tap **Apply verified full-file replacement** before the working database changes.
+
+### Existing verified rollback
+
+- Apply changes only the selected exact file inside `20_working_files/source_working`.
+- The ISO, verified backup, and protected original remain untouched.
+- **Roll back latest applied replacement** restores the verified pre-replacement file and manifests.
+
+## Important limitation
+
+Phase 1E does not claim that every FIFA binary database table or field has been decoded. It exposes verified fingerprints, known table-name markers, exact text offsets, and a controlled same-length text editor. Arbitrary integer/record editing remains disabled until the real PSP database layout is proven from the user’s file and repeatable tests.
 
 ## Build through GitHub Actions
 
@@ -79,6 +87,6 @@ Phase 1D does not rebuild an ISO yet. ISO rebuild and output verification are re
 2. Commit and push to `main` or `master`.
 3. Open **Actions** and select **Build Android Debug APK**.
 4. Wait for the green tick.
-5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1D-debug`.
+5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1E-debug`.
 
 Do not install an APK from a failed or cancelled workflow.

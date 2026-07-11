@@ -570,7 +570,7 @@ public final class ExtractionEngine {
             details.add("Working asset index: " + LOG_CONTAINER + "/" + WORKING_ASSET_INDEX);
             details.add("Protected original changed: no");
             details.add("Selected source changed: no");
-            details.add("Full-file replacement remains disabled until Phase 1D");
+            details.add("Full-file replacement remains disabled until the verified working copy is created");
 
             return new OperationResult(
                     new ScanReport(
@@ -1402,7 +1402,7 @@ public final class ExtractionEngine {
         manifest.append("file_bytes=").append(output.fileBytes).append('\n');
         manifest.append("candidate_count=").append(output.candidates.size()).append('\n');
         manifest.append("replacement_enabled=false\n");
-        manifest.append("next_step=Phase 1D controlled full-file replacement inside source_working\n");
+        manifest.append("next_step=Phase 1E database inspection and controlled replacement inside source_working\n");
         writeOrReplaceText(resolver, projectUri, "workspace_manifest.txt", manifest.toString());
     }
 

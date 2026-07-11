@@ -65,6 +65,7 @@ public final class MainActivity extends Activity {
     private TextView workingCopyStatusView;
     private TextView assetBrowserStatusView;
     private TextView selectedAssetStatusView;
+    private TextView databaseLabStatusView;
     private TextView replacementStatusView;
     private TextView stagedReplacementStatusView;
     private TextView appliedReplacementStatusView;
@@ -87,6 +88,12 @@ public final class MainActivity extends Activity {
     private Button searchAssetsButton;
     private Button previousAssetButton;
     private Button nextAssetButton;
+    private EditText databaseSearchInput;
+    private EditText databaseReplacementInput;
+    private EditText databaseOccurrenceInput;
+    private Button inspectDatabaseButton;
+    private Button searchDatabaseButton;
+    private Button buildDatabaseEditButton;
     private Button chooseReplacementButton;
     private Button validateReplacementButton;
     private Button applyReplacementButton;
@@ -141,7 +148,7 @@ public final class MainActivity extends Activity {
         });
 
         TextView badge = textView(
-                "PHASE 1D  •  CONTROLLED FULL-FILE REPLACEMENT",
+                "PHASE 1E  •  FIFA DATABASE LAB",
                 12,
                 COLOR_PRIMARY,
                 Typeface.BOLD
@@ -158,7 +165,7 @@ public final class MainActivity extends Activity {
         root.addView(title, titleParams);
 
         TextView subtitle = textView(
-                "FIFA 14 PSP scanning, verified backups, exact asset browsing, staged full-file replacement, and verified rollback inside the working copy.",
+                "FIFA 14 PSP scanning, verified backups, database fingerprinting, exact text-offset editing, staged full-file replacement, and verified rollback inside the working copy.",
                 15,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -305,10 +312,70 @@ public final class MainActivity extends Activity {
 
         root.addView(assetCard, cardParams());
 
+        LinearLayout databaseCard = createCard();
+        databaseCard.addView(sectionTitle("6. Inspect and build an edited FIFA database"));
+        databaseCard.addView(sectionBody(
+                "Select fifa.db or another .db asset above. Phase 1E verifies its current SHA-256, fingerprints the binary structure, searches exact case-sensitive text at byte offsets, and can build a complete edited copy by replacing one occurrence with text using exactly the same UTF-8 byte length."
+        ));
+
+        databaseLabStatusView = statusPanel();
+        databaseCard.addView(databaseLabStatusView, statusPanelParams());
+
+        inspectDatabaseButton = actionButton("Inspect selected database", false);
+        inspectDatabaseButton.setOnClickListener(view -> runDatabaseInspection());
+        databaseCard.addView(inspectDatabaseButton, buttonParams());
+
+        databaseSearchInput = new EditText(this);
+        databaseSearchInput.setTextSize(14);
+        databaseSearchInput.setTextColor(COLOR_TEXT);
+        databaseSearchInput.setHintTextColor(COLOR_MUTED);
+        databaseSearchInput.setHint("Find exact database text or marker");
+        databaseSearchInput.setSingleLine(true);
+        databaseSearchInput.setPadding(dp(13), dp(12), dp(13), dp(12));
+        databaseSearchInput.setBackground(roundedBackground(COLOR_CARD_ALT, COLOR_BORDER, 13));
+        LinearLayout.LayoutParams databaseSearchParams = matchWidthWrapHeight();
+        databaseSearchParams.topMargin = dp(10);
+        databaseCard.addView(databaseSearchInput, databaseSearchParams);
+
+        searchDatabaseButton = actionButton("Search exact text and byte offsets", false);
+        searchDatabaseButton.setOnClickListener(view -> runDatabaseTextSearch());
+        databaseCard.addView(searchDatabaseButton, buttonParams());
+
+        databaseReplacementInput = new EditText(this);
+        databaseReplacementInput.setTextSize(14);
+        databaseReplacementInput.setTextColor(COLOR_TEXT);
+        databaseReplacementInput.setHintTextColor(COLOR_MUTED);
+        databaseReplacementInput.setHint("Replacement text — exact same UTF-8 byte length");
+        databaseReplacementInput.setSingleLine(true);
+        databaseReplacementInput.setPadding(dp(13), dp(12), dp(13), dp(12));
+        databaseReplacementInput.setBackground(roundedBackground(COLOR_CARD_ALT, COLOR_BORDER, 13));
+        LinearLayout.LayoutParams databaseReplacementParams = matchWidthWrapHeight();
+        databaseReplacementParams.topMargin = dp(10);
+        databaseCard.addView(databaseReplacementInput, databaseReplacementParams);
+
+        databaseOccurrenceInput = new EditText(this);
+        databaseOccurrenceInput.setTextSize(14);
+        databaseOccurrenceInput.setTextColor(COLOR_TEXT);
+        databaseOccurrenceInput.setHintTextColor(COLOR_MUTED);
+        databaseOccurrenceInput.setHint("Occurrence number");
+        databaseOccurrenceInput.setText("1");
+        databaseOccurrenceInput.setSingleLine(true);
+        databaseOccurrenceInput.setPadding(dp(13), dp(12), dp(13), dp(12));
+        databaseOccurrenceInput.setBackground(roundedBackground(COLOR_CARD_ALT, COLOR_BORDER, 13));
+        LinearLayout.LayoutParams databaseOccurrenceParams = matchWidthWrapHeight();
+        databaseOccurrenceParams.topMargin = dp(10);
+        databaseCard.addView(databaseOccurrenceInput, databaseOccurrenceParams);
+
+        buildDatabaseEditButton = actionButton("Build and stage edited full database", true);
+        buildDatabaseEditButton.setOnClickListener(view -> runBuildAndStageDatabaseEdit());
+        databaseCard.addView(buildDatabaseEditButton, primaryButtonParams());
+
+        root.addView(databaseCard, cardParams());
+
         LinearLayout replacementCard = createCard();
-        replacementCard.addView(sectionTitle("6. Stage, apply, or roll back one complete file"));
+        replacementCard.addView(sectionTitle("7. Stage, apply, or roll back one complete file"));
         replacementCard.addView(sectionBody(
-                "The replacement filename must exactly match the selected asset. Validation copies it into 30_patch_import and verifies SHA-256 without changing the game. Apply first creates a verified rollback copy, then replaces only the matching file inside 20_working_files/source_working."
+                "Use this section for an external complete replacement file or for the edited database automatically produced above. Validation copies it into 30_patch_import and verifies SHA-256 without changing the game. Apply first creates a verified rollback copy, then replaces only the matching file inside 20_working_files/source_working."
         ));
 
         replacementStatusView = statusPanel();
@@ -339,9 +406,9 @@ public final class MainActivity extends Activity {
         root.addView(replacementCard, cardParams());
 
         LinearLayout patchCard = createCard();
-        patchCard.addView(sectionTitle("7. Inspect a mod patch ZIP"));
+        patchCard.addView(sectionTitle("8. Inspect a mod patch ZIP"));
         patchCard.addView(sectionBody(
-                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1D replacement is deliberately one exact full file at a time."
+                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1E replacement remains deliberately one exact full file at a time."
         ));
 
         patchStatusView = statusPanel();
@@ -372,7 +439,7 @@ public final class MainActivity extends Activity {
         reportCard.addView(operationStatusView, operationParams);
 
         reportView = textView(
-                "No Phase 1D operation has been run yet.",
+                "No Phase 1E operation has been run yet.",
                 14,
                 COLOR_TEXT,
                 Typeface.NORMAL
@@ -392,7 +459,7 @@ public final class MainActivity extends Activity {
         root.addView(reportCard, cardParams());
 
         TextView footer = textView(
-                "Phase 1D never edits the selected ISO, verified backup, or protected original. Replacement and rollback operate only on the verified working copy and transaction files inside the workspace.",
+                "Phase 1E never edits the selected ISO, verified backup, or protected original. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
                 12,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -971,6 +1038,201 @@ public final class MainActivity extends Activity {
         updateSelectionViews();
     }
 
+    private void runDatabaseInspection() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String selectedPath = SelectionStore.loadSelectedAssetPath(this);
+        String workingReference = SelectionStore.loadLatestWorkingReference(this);
+        if (workspaceProject == null || workingReference == null || workingReference.trim().isEmpty()) {
+            showToast("Create the verified working copy first.");
+            return;
+        }
+        if (selectedPath == null || selectedPath.trim().isEmpty()) {
+            showToast("Search and select fifa.db or another .db asset first.");
+            return;
+        }
+
+        final Uri selectedWorkspace = workspaceProject;
+        final String targetPath = selectedPath;
+        setBusy(true, "Verifying and fingerprinting the selected database…");
+        operationExecutor.execute(() -> {
+            AssetRecord asset = ReplacementEngine.findAsset(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    targetPath
+            );
+            ScanReport report = DatabaseLab.inspectDatabase(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    asset
+            );
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                if (asset != null) {
+                    selectedAsset = asset;
+                    replaceAssetMatch(asset);
+                }
+                reportView.setText(report.toDisplayText());
+                setBusy(false, "Database inspection complete.");
+                updateSelectionViews();
+            });
+        });
+    }
+
+    private void runDatabaseTextSearch() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String selectedPath = SelectionStore.loadSelectedAssetPath(this);
+        String workingReference = SelectionStore.loadLatestWorkingReference(this);
+        if (workspaceProject == null || workingReference == null || workingReference.trim().isEmpty()) {
+            showToast("Create the verified working copy first.");
+            return;
+        }
+        if (selectedPath == null || selectedPath.trim().isEmpty()) {
+            showToast("Search and select fifa.db or another .db asset first.");
+            return;
+        }
+        final String searchText = databaseSearchInput.getText() == null
+                ? ""
+                : databaseSearchInput.getText().toString();
+        if (searchText.isEmpty()) {
+            showToast("Enter exact case-sensitive database text to search.");
+            return;
+        }
+
+        final Uri selectedWorkspace = workspaceProject;
+        final String targetPath = selectedPath;
+        setBusy(true, "Searching exact database bytes and offsets…");
+        operationExecutor.execute(() -> {
+            AssetRecord asset = ReplacementEngine.findAsset(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    targetPath
+            );
+            ScanReport report = DatabaseLab.searchDatabaseText(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    asset,
+                    searchText
+            );
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                if (asset != null) {
+                    selectedAsset = asset;
+                    replaceAssetMatch(asset);
+                }
+                reportView.setText(report.toDisplayText());
+                setBusy(false, "Database text search complete.");
+                updateSelectionViews();
+            });
+        });
+    }
+
+    private void runBuildAndStageDatabaseEdit() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String selectedPath = SelectionStore.loadSelectedAssetPath(this);
+        String workingReference = SelectionStore.loadLatestWorkingReference(this);
+        if (workspaceProject == null || workingReference == null || workingReference.trim().isEmpty()) {
+            showToast("Create the verified working copy first.");
+            return;
+        }
+        if (selectedPath == null || selectedPath.trim().isEmpty()) {
+            showToast("Search and select fifa.db or another .db asset first.");
+            return;
+        }
+        final String findText = databaseSearchInput.getText() == null
+                ? ""
+                : databaseSearchInput.getText().toString();
+        final String replacementText = databaseReplacementInput.getText() == null
+                ? ""
+                : databaseReplacementInput.getText().toString();
+        final String occurrenceText = databaseOccurrenceInput.getText() == null
+                ? ""
+                : databaseOccurrenceInput.getText().toString().trim();
+        final int occurrenceNumber;
+        try {
+            occurrenceNumber = Integer.parseInt(occurrenceText);
+        } catch (RuntimeException error) {
+            showToast("Occurrence number must be a whole number starting at 1.");
+            return;
+        }
+
+        final Uri selectedWorkspace = workspaceProject;
+        final String targetPath = selectedPath;
+        SelectionStore.clearStagedReplacement(this);
+        setBusy(true, "Building a verified edited database copy, then staging it…");
+        operationExecutor.execute(() -> {
+            AssetRecord asset = ReplacementEngine.findAsset(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    targetPath
+            );
+            OperationResult editResult = DatabaseLab.createEditedDatabaseCopy(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    asset,
+                    findText,
+                    replacementText,
+                    occurrenceNumber,
+                    this::showOperationProgress
+            );
+            StagedReplacementResult stageResult = null;
+            if (editResult.isSuccess()) {
+                stageResult = ReplacementEngine.validateAndStageReplacement(
+                        getApplicationContext(),
+                        selectedWorkspace,
+                        asset,
+                        editResult.getCreatedUri(),
+                        this::showOperationProgress
+                );
+            }
+            final StagedReplacementResult completedStage = stageResult;
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                StringBuilder combinedReport = new StringBuilder(
+                        editResult.getReport().toDisplayText()
+                );
+                boolean staged = false;
+                if (editResult.isSuccess()) {
+                    replacementFileUri = editResult.getCreatedUri();
+                    SelectionStore.saveReplacementFileUri(this, replacementFileUri);
+                    if (asset != null) {
+                        selectedAsset = asset;
+                        replaceAssetMatch(asset);
+                    }
+                }
+                if (completedStage != null) {
+                    OperationResult stageOperation = completedStage.getOperationResult();
+                    combinedReport.append("\n\n").append(stageOperation.getReport().toDisplayText());
+                    if (stageOperation.isSuccess()) {
+                        staged = true;
+                        SelectionStore.saveStagedReplacement(
+                                this,
+                                completedStage.getTransactionUri(),
+                                stageOperation.getReference(),
+                                completedStage.getTargetPath(),
+                                completedStage.getReplacementSha256(),
+                                completedStage.getReplacementSize()
+                        );
+                    }
+                }
+                reportView.setText(combinedReport.toString());
+                if (staged) {
+                    setBusy(false, "Edited database built and staged. Review the report before applying.");
+                } else if (editResult.isSuccess()) {
+                    setBusy(false, "Edited database built, but staging stopped safely.");
+                } else {
+                    setBusy(false, "Database edit generation stopped safely.");
+                }
+                updateSelectionViews();
+            });
+        });
+    }
+
     private void runValidateReplacement() {
         Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
         String selectedPath = SelectionStore.loadSelectedAssetPath(this);
@@ -1303,6 +1565,25 @@ public final class MainActivity extends Activity {
             selectedAssetStatusView.setText("No working asset selected");
         }
 
+        boolean selectedDatabase = selectedAsset != null && DatabaseRules.isDatabaseAsset(selectedAsset);
+        if (selectedDatabase) {
+            databaseLabStatusView.setText(
+                    "Database Lab target\n"
+                            + selectedAsset.getPath() + "\n"
+                            + GameScanner.formatBytes(selectedAsset.getSizeBytes())
+                            + " • exact working SHA-256 verified before every operation"
+            );
+        } else if (selectedPath != null && selectedPath.toLowerCase(Locale.US).endsWith(".db")) {
+            databaseLabStatusView.setText(
+                    "Saved database target\n" + selectedPath
+                            + "\nSearch the asset index again to refresh its current size and SHA-256."
+            );
+        } else {
+            databaseLabStatusView.setText(
+                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab."
+            );
+        }
+
         if (replacementFileUri != null) {
             replacementStatusView.setText(
                     "Selected replacement file\n" + GameScanner.describeUri(this, replacementFileUri)
@@ -1342,6 +1623,9 @@ public final class MainActivity extends Activity {
         boolean hasExtraction = extractionReference != null && !extractionReference.trim().isEmpty();
         boolean hasSelectedAsset = selectedAsset != null
                 || (selectedPath != null && !selectedPath.trim().isEmpty());
+        boolean hasSelectedDatabase = (selectedAsset != null && DatabaseRules.isDatabaseAsset(selectedAsset))
+                || (selectedAsset == null && selectedPath != null
+                && selectedPath.toLowerCase(Locale.US).endsWith(".db"));
         boolean hasStagedReplacement = SelectionStore.loadStagedTransactionUri(this) != null
                 && !SelectionStore.loadStagedTargetPath(this).trim().isEmpty();
         boolean hasAppliedReplacement = SelectionStore.loadAppliedTransactionUri(this) != null
@@ -1359,6 +1643,9 @@ public final class MainActivity extends Activity {
         searchAssetsButton.setEnabled(hasWorkingCopy);
         previousAssetButton.setEnabled(hasWorkingCopy && assetMatches.size() > 1);
         nextAssetButton.setEnabled(hasWorkingCopy && assetMatches.size() > 1);
+        inspectDatabaseButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
+        searchDatabaseButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
+        buildDatabaseEditButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         chooseReplacementButton.setEnabled(hasWorkingCopy && hasSelectedAsset);
         validateReplacementButton.setEnabled(
                 hasWorkingCopy && hasSelectedAsset && replacementFileUri != null
@@ -1394,6 +1681,9 @@ public final class MainActivity extends Activity {
         choosePatchButton.setEnabled(!busy);
         chooseReplacementButton.setEnabled(!busy);
         assetSearchInput.setEnabled(!busy);
+        databaseSearchInput.setEnabled(!busy);
+        databaseReplacementInput.setEnabled(!busy);
+        databaseOccurrenceInput.setEnabled(!busy);
         resetButton.setEnabled(!busy);
 
         if (busy) {
@@ -1407,6 +1697,9 @@ public final class MainActivity extends Activity {
             searchAssetsButton.setEnabled(false);
             previousAssetButton.setEnabled(false);
             nextAssetButton.setEnabled(false);
+            inspectDatabaseButton.setEnabled(false);
+            searchDatabaseButton.setEnabled(false);
+            buildDatabaseEditButton.setEnabled(false);
             chooseReplacementButton.setEnabled(false);
             validateReplacementButton.setEnabled(false);
             applyReplacementButton.setEnabled(false);
