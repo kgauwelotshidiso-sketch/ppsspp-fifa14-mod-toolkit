@@ -226,7 +226,6 @@ public final class MainActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, REQUEST_GAME_FILE);
     }
@@ -234,7 +233,6 @@ public final class MainActivity extends Activity {
     private void openGameFolderPicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         intent.addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
         startActivityForResult(intent, REQUEST_GAME_FOLDER);
@@ -287,13 +285,17 @@ public final class MainActivity extends Activity {
     }
 
     private void persistGrantedPermission(Uri uri, Intent resultData) {
-        int flags = resultData.getFlags()
-                & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-        if (flags == 0) {
+        boolean readPermissionGranted = (resultData.getFlags()
+                & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0;
+        if (!readPermissionGranted) {
             return;
         }
+
         try {
-            getContentResolver().takePersistableUriPermission(uri, flags);
+            getContentResolver().takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+            );
         } catch (SecurityException ignored) {
             // Some providers grant access only for the current app session.
         }
@@ -303,20 +305,14 @@ public final class MainActivity extends Activity {
         if (uri == null) {
             return;
         }
+
         try {
             getContentResolver().releasePersistableUriPermission(
                     uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
             );
         } catch (SecurityException ignored) {
-            try {
-                getContentResolver().releasePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                );
-            } catch (SecurityException ignoredAgain) {
-                // Permission may be session-only or already released.
-            }
+            // Permission may be session-only, already released, or provider-managed.
         }
     }
 

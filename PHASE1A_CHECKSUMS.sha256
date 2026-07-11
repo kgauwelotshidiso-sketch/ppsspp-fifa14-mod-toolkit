@@ -5,7 +5,7 @@ a68f6526cf5e6573808e6030f4ce006c382527a28a8cae34e077584c6ac405cd  ./README.md
 c6dddb5b0cca7f7566a9e6f15c120efcb400bf7e1c10738c96249b65ff16ea2c  ./app/proguard-rules.pro
 2d84ba2e4d2ebbf92206d0bbc013ec83ba04bd24e408d533fe9cf7ac2d3ed538  ./app/src/main/AndroidManifest.xml
 bec2da89481bb39afd61286579bdb6fd8d48e736046d74067d82d2b690714943  ./app/src/main/java/com/tshidiso/ppssppmodtoolkit/GameScanner.java
-9c783181480aa39866f4a75b8de3e4e78c5ff79df123bec697aa35d8f543e1c2  ./app/src/main/java/com/tshidiso/ppssppmodtoolkit/MainActivity.java
+cd66a294c0801718a529f7d9b3fa855a76a4a0c95ad3a7840b2f54bd5b3fa14f  ./app/src/main/java/com/tshidiso/ppssppmodtoolkit/MainActivity.java
 ee7b96fe3522e45b58eaa566fac0ed2397bce88b040348332ce8e78a769a88e8  ./app/src/main/java/com/tshidiso/ppssppmodtoolkit/ScanReport.java
 76c00cfc650b4cecb6bf28920835cf072cf6fe1e12a63eeb3542bae66bbbd422  ./app/src/main/java/com/tshidiso/ppssppmodtoolkit/SelectionStore.java
 8ea71f0a51ba5801cbfd26c8694ae0589c292e244799ba4cb97ceb2d1a99df35  ./app/src/main/res/drawable/ic_launcher.xml
@@ -13,5 +13,5 @@ ee7b96fe3522e45b58eaa566fac0ed2397bce88b040348332ce8e78a769a88e8  ./app/src/main
 c997039be517998350be71341ac6d82c50806db907f959b433e2fddc7b7d6df3  ./app/src/main/res/values/themes.xml
 2e38317f134933f2455f062da35fa8fee1e48972712ac949144fe285c2182677  ./app/src/test/java/com/tshidiso/ppssppmodtoolkit/GameScannerRulesTest.java
 10ad2226ce187796b3ac67efe18af47d623a140f3ad1554134424a8365c4bd5a  ./build.gradle.kts
-bf34510efd85501882c0d19fe334ad96a07909cf12a09776e17556acbb4f4aa6  ./gradle.properties
+30025ec45313e577ef019ca27d525d0614933d5a20ad74c9a047fc70f8fc7759  ./gradle.properties
 e4397e1a5ca60d1117fa7750380dc95cc82499bc73e31de222f90aa0562a5c51  ./settings.gradle.kts
