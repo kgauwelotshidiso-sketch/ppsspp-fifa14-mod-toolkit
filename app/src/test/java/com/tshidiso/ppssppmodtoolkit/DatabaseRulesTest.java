@@ -91,4 +91,16 @@ public final class DatabaseRulesTest {
         assertEquals("1, 16777216", DatabaseRules.firstIntegers(bytes, ByteOrder.LITTLE_ENDIAN, 2));
         assertEquals("16777216, 1", DatabaseRules.firstIntegers(bytes, ByteOrder.BIG_ENDIAN, 2));
     }
+    @Test
+    public void knownTableNameIsNormalizedAndValidated() {
+        assertEquals("players", DatabaseRules.requireKnownTableName(" PLAYERS "));
+        assertTrue(DatabaseRules.knownTableMarkers().contains("teams"));
+        assertTrue(DatabaseRules.knownTableMarkers().contains("teamplayerlinks"));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void unknownTableNameIsRejected() {
+        DatabaseRules.requireKnownTableName("made_up_table");
+    }
+
 }

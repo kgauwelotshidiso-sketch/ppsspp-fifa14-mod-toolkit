@@ -1,85 +1,112 @@
-# PPSSPP Mod Toolkit — Phase 1E
+# PPSSPP Mod Toolkit — Phase 1F
 
 A native Android toolkit for Android-only PSP game modding, initially focused on FIFA 14 PSP/PPSSPP.
 
-## Phase 1E working features
+## Phase 1F working features
 
-Phase 1E keeps all Phase 1A–1D source scanning, verified backup, controlled workspace, ISO extraction, exact-path indexing, verified working copy, staged full-file replacement, and rollback features. It adds a conservative FIFA database lab for the selected `.db` working asset.
+Phase 1F keeps all Phase 1A–1E features: source scanning, verified backup, controlled workspace, ISO extraction, exact-path asset indexing, verified working copy, staged full-file replacement, rollback, database fingerprinting, exact text search, and same-length edited-copy generation.
 
-### Verified database inspection
+It adds a conservative **read-only FIFA binary table decoder** for the selected working `.db` file.
 
-- Requires a selected `.db` asset such as:
+### Read-only table decoder
 
-```text
-PSP_GAME/USRDIR/data/cmn/fifa.db
-```
-
-- Resolves the exact file only inside:
+The decoder starts with verified FIFA tables such as:
 
 ```text
-20_working_files/source_working
+players
+teams
+teamplayerlinks
 ```
 
-- Rechecks the file size and SHA-256 against the current working asset index before every operation.
-- Detects SQLite 3 headers, known FIFA table-name markers, mostly-text files, and unknown binary formats without guessing a decoded schema.
-- Reports:
-  - exact path
-  - file size
-  - SHA-256
-  - format fingerprint
-  - printable-string count
-  - known table-name markers
-  - first little-endian and big-endian 32-bit values
-  - first 64 header bytes in hexadecimal
+It also accepts the other known table markers already recognized by the Database Lab.
 
-### Exact database text search
+Before decoding, the app:
 
-- Searches exact case-sensitive UTF-8 byte sequences.
-- Reports total occurrences.
-- Reports up to 50 byte offsets in decimal and hexadecimal.
-- Shows printable context around each occurrence.
-- Never changes the database during inspection or search.
+- resolves the exact selected file only inside `20_working_files/source_working`
+- rechecks file size and SHA-256 against the current working asset index
+- refuses stale asset records
+- keeps the ISO, verified backup, protected original, and working database unchanged
 
-### Same-length database edit builder
+### Candidate header and section map
 
-- Accepts:
-  - exact find text
-  - replacement text
-  - occurrence number
-- Requires find and replacement text to use exactly the same number of UTF-8 bytes.
-- Rejects empty text, identical replacements, line breaks, NUL bytes, missing matches, and invalid occurrence numbers.
-- Replaces only the selected occurrence in memory.
-- Creates a complete edited database copy at:
+For compatible EA/FIFA binary databases, Phase 1F:
+
+- reads the third little-endian 32-bit header word as a **candidate header-size value** only when it is aligned and within conservative bounds
+- reads the candidate header words without changing the file
+- identifies monotonic in-file offsets
+- maps those offsets into candidate section ranges
+- reports confidence as a structural candidate, not a proven semantic schema
+
+### Table-marker map
+
+The decoder:
+
+- searches known table names case-insensitively
+- requires token boundaries to reduce false substring matches
+- sorts table markers by exact byte offset
+- reports the previous and next known marker
+- maps each marker to the candidate section containing it
+- reports nearby printable strings and a bounded hexadecimal window
+
+### Aligned numeric observations
+
+Around the requested marker, the app reports:
+
+- aligned little-endian 32-bit words
+- zero values
+- values matching candidate section starts
+- possible in-file pointers
+- pointers landing on known markers or printable ASCII
+- small integer/count candidates
+
+These are observations only. No field name or record meaning is claimed without proof.
+
+### Record-layout hypotheses
+
+Phase 1F conservatively tests nearby groups of three aligned 32-bit words as possible:
 
 ```text
-30_patch_import/phase1e_database_edits/<edit_id>/<exact_database_filename>
+record count
+record size in bytes
+data offset
 ```
 
-- Reopens and SHA-256 verifies the generated database copy.
-- Writes `database_edit_manifest.txt` beside it with the target path, byte offset, occurrence number, old hash, new hash, and Base64URL-encoded text values.
-- Leaves the working database unchanged while the edited copy is being built.
+A hypothesis is retained only when:
 
-### Automatic Phase 1D staging
+- count and record size stay within safety limits
+- multiplication does not overflow
+- calculated record data remains inside the database
+- the candidate data offset is valid
 
-After the edited database copy is verified, Phase 1E automatically sends it through the existing Phase 1D replacement validator:
+Hypotheses are ranked and explicitly labeled **UNCONFIRMED**. The top candidate may show a few raw unsigned 32-bit sample records for comparison. Numeric editing remains disabled.
 
-- exact filename check
-- stale-target size/hash check
-- workspace-space check
-- staged-copy SHA-256 verification
-- rollback-copy requirement before apply
+### Verified decoder report
 
-The user must still review the operation report and tap **Apply verified full-file replacement** before the working database changes.
+Each decoder run creates and reopens a report inside:
 
-### Existing verified rollback
+```text
+90_logs/phase1f_table_decoder_reports/
+```
 
-- Apply changes only the selected exact file inside `20_working_files/source_working`.
-- The ISO, verified backup, and protected original remain untouched.
-- **Roll back latest applied replacement** restores the verified pre-replacement file and manifests.
+The report contains:
+
+- selected database path and verified SHA-256
+- requested table
+- candidate header words and sections
+- complete known-marker map
+- local aligned values and pointer classifications
+- record-layout hypotheses
+- explicit read-only safety statements
+
+The saved report is SHA-256 verified after writing.
+
+### Existing Database Lab editing
+
+Phase 1E same-length text editing remains available, but structural names such as `players`, `teams`, and `teamplayerlinks` must not be edited. A generated edited database still goes through the Phase 1D staging, verified rollback-copy, apply, and rollback pipeline.
 
 ## Important limitation
 
-Phase 1E does not claim that every FIFA binary database table or field has been decoded. It exposes verified fingerprints, known table-name markers, exact text offsets, and a controlled same-length text editor. Arbitrary integer/record editing remains disabled until the real PSP database layout is proven from the user’s file and repeatable tests.
+Phase 1F is a structural reverse-engineering step. Candidate section ranges and layout hypotheses are not yet a proven FIFA PSP table schema. The app does not expose numeric field editing, transfers, ratings, IDs, or row insertion until record boundaries and field descriptors are repeatably verified from the user’s real database.
 
 ## Build through GitHub Actions
 
@@ -87,6 +114,6 @@ Phase 1E does not claim that every FIFA binary database table or field has been 
 2. Commit and push to `main` or `master`.
 3. Open **Actions** and select **Build Android Debug APK**.
 4. Wait for the green tick.
-5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1E-debug`.
+5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1F-debug`.
 
 Do not install an APK from a failed or cancelled workflow.

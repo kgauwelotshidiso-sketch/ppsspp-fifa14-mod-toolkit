@@ -88,10 +88,12 @@ public final class MainActivity extends Activity {
     private Button searchAssetsButton;
     private Button previousAssetButton;
     private Button nextAssetButton;
+    private EditText databaseTableInput;
     private EditText databaseSearchInput;
     private EditText databaseReplacementInput;
     private EditText databaseOccurrenceInput;
     private Button inspectDatabaseButton;
+    private Button decodeDatabaseTableButton;
     private Button searchDatabaseButton;
     private Button buildDatabaseEditButton;
     private Button chooseReplacementButton;
@@ -148,7 +150,7 @@ public final class MainActivity extends Activity {
         });
 
         TextView badge = textView(
-                "PHASE 1E  •  FIFA DATABASE LAB",
+                "PHASE 1F  •  READ-ONLY TABLE DECODER",
                 12,
                 COLOR_PRIMARY,
                 Typeface.BOLD
@@ -165,7 +167,7 @@ public final class MainActivity extends Activity {
         root.addView(title, titleParams);
 
         TextView subtitle = textView(
-                "FIFA 14 PSP scanning, verified backups, database fingerprinting, exact text-offset editing, staged full-file replacement, and verified rollback inside the working copy.",
+                "FIFA 14 PSP scanning, verified backups, read-only binary table mapping, exact text-offset editing, staged full-file replacement, and verified rollback inside the working copy.",
                 15,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -313,9 +315,9 @@ public final class MainActivity extends Activity {
         root.addView(assetCard, cardParams());
 
         LinearLayout databaseCard = createCard();
-        databaseCard.addView(sectionTitle("6. Inspect and build an edited FIFA database"));
+        databaseCard.addView(sectionTitle("6. Decode and inspect FIFA database tables"));
         databaseCard.addView(sectionBody(
-                "Select fifa.db or another .db asset above. Phase 1E verifies its current SHA-256, fingerprints the binary structure, searches exact case-sensitive text at byte offsets, and can build a complete edited copy by replacing one occurrence with text using exactly the same UTF-8 byte length."
+                "Select fifa.db or another .db asset above. Phase 1F verifies its current SHA-256, maps known table markers and candidate section offsets, probes aligned values and record-layout hypotheses read-only, and saves a decoder report in 90_logs. Numeric editing remains disabled until a schema is proven."
         ));
 
         databaseLabStatusView = statusPanel();
@@ -324,6 +326,27 @@ public final class MainActivity extends Activity {
         inspectDatabaseButton = actionButton("Inspect selected database", false);
         inspectDatabaseButton.setOnClickListener(view -> runDatabaseInspection());
         databaseCard.addView(inspectDatabaseButton, buttonParams());
+
+        databaseTableInput = new EditText(this);
+        databaseTableInput.setTextSize(14);
+        databaseTableInput.setTextColor(COLOR_TEXT);
+        databaseTableInput.setHintTextColor(COLOR_MUTED);
+        databaseTableInput.setHint("Table name: players, teams, or teamplayerlinks");
+        databaseTableInput.setText("players");
+        databaseTableInput.setSingleLine(true);
+        databaseTableInput.setPadding(dp(13), dp(12), dp(13), dp(12));
+        databaseTableInput.setBackground(roundedBackground(COLOR_CARD_ALT, COLOR_BORDER, 13));
+        LinearLayout.LayoutParams databaseTableParams = matchWidthWrapHeight();
+        databaseTableParams.topMargin = dp(10);
+        databaseCard.addView(databaseTableInput, databaseTableParams);
+
+        decodeDatabaseTableButton = actionButton("Decode selected table structure — read only", true);
+        decodeDatabaseTableButton.setOnClickListener(view -> runDatabaseTableDecode());
+        databaseCard.addView(decodeDatabaseTableButton, primaryButtonParams());
+
+        databaseCard.addView(sectionBody(
+                "The exact-text tools below remain available for same-length literal edits. Do not edit structural table names such as players, teams, or teamplayerlinks."
+        ));
 
         databaseSearchInput = new EditText(this);
         databaseSearchInput.setTextSize(14);
@@ -408,7 +431,7 @@ public final class MainActivity extends Activity {
         LinearLayout patchCard = createCard();
         patchCard.addView(sectionTitle("8. Inspect a mod patch ZIP"));
         patchCard.addView(sectionBody(
-                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1E replacement remains deliberately one exact full file at a time."
+                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1F replacement remains deliberately one exact full file at a time."
         ));
 
         patchStatusView = statusPanel();
@@ -439,7 +462,7 @@ public final class MainActivity extends Activity {
         reportCard.addView(operationStatusView, operationParams);
 
         reportView = textView(
-                "No Phase 1E operation has been run yet.",
+                "No Phase 1F operation has been run yet.",
                 14,
                 COLOR_TEXT,
                 Typeface.NORMAL
@@ -459,7 +482,7 @@ public final class MainActivity extends Activity {
         root.addView(reportCard, cardParams());
 
         TextView footer = textView(
-                "Phase 1E never edits the selected ISO, verified backup, or protected original. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
+                "Phase 1F never edits the selected ISO, verified backup, or protected original. Table decoding is read-only and writes only a text report in 90_logs. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
                 12,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -1080,6 +1103,62 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void runDatabaseTableDecode() {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String selectedPath = SelectionStore.loadSelectedAssetPath(this);
+        String workingReference = SelectionStore.loadLatestWorkingReference(this);
+        if (workspaceProject == null || workingReference == null || workingReference.trim().isEmpty()) {
+            showToast("Create the verified working copy first.");
+            return;
+        }
+        if (selectedPath == null || selectedPath.trim().isEmpty()) {
+            showToast("Search and select fifa.db or another .db asset first.");
+            return;
+        }
+        final String tableName = databaseTableInput.getText() == null
+                ? ""
+                : databaseTableInput.getText().toString().trim();
+        if (tableName.isEmpty()) {
+            showToast("Enter players, teams, teamplayerlinks, or another supported table name.");
+            return;
+        }
+
+        final Uri selectedWorkspace = workspaceProject;
+        final String targetPath = selectedPath;
+        setBusy(true, "Decoding table markers and binary layout read-only…");
+        operationExecutor.execute(() -> {
+            AssetRecord asset = ReplacementEngine.findAsset(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    targetPath
+            );
+            OperationResult result = DatabaseLab.decodeTableStructure(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    asset,
+                    tableName,
+                    this::showOperationProgress
+            );
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                if (asset != null) {
+                    selectedAsset = asset;
+                    replaceAssetMatch(asset);
+                }
+                reportView.setText(result.getReport().toDisplayText());
+                setBusy(
+                        false,
+                        result.isSuccess()
+                                ? "Read-only table decoder report created."
+                                : "Table decode stopped safely."
+                );
+                updateSelectionViews();
+            });
+        });
+    }
+
     private void runDatabaseTextSearch() {
         Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
         String selectedPath = SelectionStore.loadSelectedAssetPath(this);
@@ -1572,6 +1651,7 @@ public final class MainActivity extends Activity {
                             + selectedAsset.getPath() + "\n"
                             + GameScanner.formatBytes(selectedAsset.getSizeBytes())
                             + " • exact working SHA-256 verified before every operation"
+                            + "\nRead-only table decoder ready for players, teams, and teamplayerlinks"
             );
         } else if (selectedPath != null && selectedPath.toLowerCase(Locale.US).endsWith(".db")) {
             databaseLabStatusView.setText(
@@ -1580,7 +1660,7 @@ public final class MainActivity extends Activity {
             );
         } else {
             databaseLabStatusView.setText(
-                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab."
+                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab and table decoder."
             );
         }
 
@@ -1644,6 +1724,7 @@ public final class MainActivity extends Activity {
         previousAssetButton.setEnabled(hasWorkingCopy && assetMatches.size() > 1);
         nextAssetButton.setEnabled(hasWorkingCopy && assetMatches.size() > 1);
         inspectDatabaseButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
+        decodeDatabaseTableButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         searchDatabaseButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         buildDatabaseEditButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         chooseReplacementButton.setEnabled(hasWorkingCopy && hasSelectedAsset);
@@ -1681,6 +1762,7 @@ public final class MainActivity extends Activity {
         choosePatchButton.setEnabled(!busy);
         chooseReplacementButton.setEnabled(!busy);
         assetSearchInput.setEnabled(!busy);
+        databaseTableInput.setEnabled(!busy);
         databaseSearchInput.setEnabled(!busy);
         databaseReplacementInput.setEnabled(!busy);
         databaseOccurrenceInput.setEnabled(!busy);
@@ -1698,6 +1780,7 @@ public final class MainActivity extends Activity {
             previousAssetButton.setEnabled(false);
             nextAssetButton.setEnabled(false);
             inspectDatabaseButton.setEnabled(false);
+            decodeDatabaseTableButton.setEnabled(false);
             searchDatabaseButton.setEnabled(false);
             buildDatabaseEditButton.setEnabled(false);
             chooseReplacementButton.setEnabled(false);

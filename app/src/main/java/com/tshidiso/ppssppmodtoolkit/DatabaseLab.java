@@ -26,18 +26,20 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * Phase 1E read-only FIFA database inspection and safe edited-copy builder.
+ * Phase 1F FIFA database inspection, read-only structural decoding, and safe edited-copy builder.
  *
  * <p>This class never edits the selected working database. It creates a complete edited copy in
  * 30_patch_import. Phase 1D then performs its normal staging, rollback-copy, apply, and verification
- * sequence.</p>
+ * sequence. Phase 1F table decoding writes only a verified text report inside 90_logs.</p>
  */
 public final class DatabaseLab {
     private static final int BUFFER_BYTES = 256 * 1024;
     private static final String WORKING_CONTAINER = "20_working_files";
     private static final String WORKING_ROOT = "source_working";
     private static final String PATCH_CONTAINER = "30_patch_import";
+    private static final String LOGS_CONTAINER = "90_logs";
     private static final String EDITS_ROOT = "phase1e_database_edits";
+    private static final String DECODER_REPORTS_ROOT = "phase1f_table_decoder_reports";
     private static final String EDIT_MANIFEST = "database_edit_manifest.txt";
 
     private DatabaseLab() {
@@ -80,8 +82,8 @@ public final class DatabaseLab {
                 candidates.add("Table marker: " + marker);
             }
             String summary = markers.isEmpty()
-                    ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1E will not claim a decoded table schema. Exact text search remains available."
-                    : "The file was verified and known FIFA table-name markers were detected. Phase 1E exposes exact byte offsets and builds same-length edited copies without touching the working database.";
+                    ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1F will not claim a decoded table schema. Exact text search remains available."
+                    : "The file was verified and known FIFA table-name markers were detected. Phase 1F exposes exact byte offsets and builds same-length edited copies without touching the working database.";
             return report(
                     "FIFA database inspection",
                     "Database verified",
@@ -162,6 +164,106 @@ public final class DatabaseLab {
                     "No database file was changed.",
                     details,
                     candidates
+            );
+        }
+    }
+
+    public static OperationResult decodeTableStructure(
+            Context context,
+            Uri workspaceProjectUri,
+            AssetRecord asset,
+            String tableName,
+            ReplacementEngine.ProgressListener listener
+    ) {
+        List<String> details = new ArrayList<>();
+        if (!DatabaseRules.isDatabaseAsset(asset)) {
+            return failed(
+                    "FIFA table structure decoder",
+                    "Database target required",
+                    "Select fifa.db or another verified .db working asset first.",
+                    details
+            );
+        }
+        ContentResolver resolver = context.getContentResolver();
+        Uri reportFile = null;
+        try {
+            notifyProgress(listener, "Reading and verifying selected database", 0L, asset.getSizeBytes());
+            LoadedDatabase loaded = loadVerifiedDatabase(context, workspaceProjectUri, asset, listener);
+            notifyProgress(listener, "Mapping FIFA table structures read-only", 0L, loaded.bytes.length);
+            FifaTableDecoder.DecodeResult decoded = FifaTableDecoder.decode(
+                    loaded.bytes,
+                    tableName
+            );
+
+            WorkspacePaths workspace = requireWorkspace(resolver, workspaceProjectUri);
+            Uri reportsRoot = findOrCreateDirectory(
+                    resolver,
+                    workspace.logs,
+                    DECODER_REPORTS_ROOT
+            );
+            String reportName = "table_decoder_"
+                    + decoded.getTableName()
+                    + "_"
+                    + newEditId()
+                    + ".txt";
+            reportFile = createFileExact(resolver, reportsRoot, reportName);
+            String reportText = "phase=1F\n"
+                    + "database_path_b64=" + b64(asset.getPath()) + "\n"
+                    + "database_sha256=" + loaded.sha256 + "\n"
+                    + "database_changed=false\n\n"
+                    + decoded.getFullReportText();
+            byte[] reportBytes = reportText.getBytes(StandardCharsets.UTF_8);
+            writeBytes(
+                    resolver,
+                    reportFile,
+                    reportBytes,
+                    "Writing table decoder report",
+                    listener
+            );
+            LoadedBytes verifiedReport = readBytesAndHash(
+                    resolver,
+                    reportFile,
+                    "Verifying table decoder report",
+                    listener
+            );
+            if (verifiedReport.bytes.length != reportBytes.length
+                    || !sha256(reportBytes).equals(verifiedReport.sha256)) {
+                throw new IOException("Saved table decoder report failed SHA-256 verification");
+            }
+
+            details.addAll(decoded.getDetails());
+            details.add("Database SHA-256 checked before decode: " + loaded.sha256);
+            details.add("Saved report: 90_logs/" + DECODER_REPORTS_ROOT + "/" + reportName);
+            details.add("Saved report SHA-256: " + verifiedReport.sha256);
+            details.add("Working database changed: no");
+            details.add("Protected original changed: no");
+            details.add("ISO and verified backup changed: no");
+            ScanReport report = report(
+                    "FIFA table structure decoder",
+                    decoded.isMarkerFound()
+                            ? "Read-only table probe complete"
+                            : "Requested marker not found",
+                    decoded.getSummary(),
+                    details,
+                    decoded.getFindings()
+            );
+            return new OperationResult(
+                    report,
+                    decoded.isMarkerFound(),
+                    reportFile,
+                    decoded.getTableName() + " | " + reportName
+            );
+        } catch (IOException | IllegalArgumentException | SecurityException error) {
+            if (reportFile != null) {
+                deleteQuietly(resolver, reportFile);
+            }
+            details.add(safeMessage(error));
+            details.add("Working database changed: no");
+            return failed(
+                    "FIFA table structure decoder",
+                    "Decode stopped safely",
+                    "No working database, protected original, ISO, or verified backup was changed.",
+                    details
             );
         }
     }
@@ -299,7 +401,7 @@ public final class DatabaseLab {
         }
         if (asset.getSizeBytes() > DatabaseRules.MAX_DATABASE_BYTES) {
             throw new IOException(
-                    "Database exceeds the Phase 1E in-memory safety limit of "
+                    "Database exceeds the Database Lab in-memory safety limit of "
                             + GameScanner.formatBytes(DatabaseRules.MAX_DATABASE_BYTES)
             );
         }
@@ -347,7 +449,7 @@ public final class DatabaseLab {
                     }
                     total += read;
                     if (total > DatabaseRules.MAX_DATABASE_BYTES) {
-                        throw new IOException("Database exceeds the Phase 1E in-memory safety limit");
+                        throw new IOException("Database exceeds the Database Lab in-memory safety limit");
                     }
                     output.write(buffer, 0, read);
                     digest.update(buffer, 0, read);
@@ -390,10 +492,13 @@ public final class DatabaseLab {
         Uri workingContainer = requireChild(resolver, workspaceProjectUri, WORKING_CONTAINER);
         Uri workingRoot = requireChild(resolver, workingContainer, WORKING_ROOT);
         Uri patchImport = requireChild(resolver, workspaceProjectUri, PATCH_CONTAINER);
-        if (!isDirectory(resolver, workingRoot) || !isDirectory(resolver, patchImport)) {
+        Uri logs = requireChild(resolver, workspaceProjectUri, LOGS_CONTAINER);
+        if (!isDirectory(resolver, workingRoot)
+                || !isDirectory(resolver, patchImport)
+                || !isDirectory(resolver, logs)) {
             throw new IOException("Workspace structure is incomplete");
         }
-        return new WorkspacePaths(workingRoot, patchImport);
+        return new WorkspacePaths(workingRoot, patchImport, logs);
     }
 
     private static Uri resolvePath(
@@ -592,7 +697,7 @@ public final class DatabaseLab {
             int occurrenceNumber,
             DatabaseRules.PatchPlan plan
     ) {
-        return "phase=1E\n"
+        return "phase=1F\n"
                 + "state=EDITED_COPY_VERIFIED\n"
                 + "edit_id=" + editId + "\n"
                 + "created_utc=" + utcTimestamp() + "\n"
@@ -707,10 +812,12 @@ public final class DatabaseLab {
     private static final class WorkspacePaths {
         final Uri workingRoot;
         final Uri patchImport;
+        final Uri logs;
 
-        WorkspacePaths(Uri workingRoot, Uri patchImport) {
+        WorkspacePaths(Uri workingRoot, Uri patchImport, Uri logs) {
             this.workingRoot = workingRoot;
             this.patchImport = patchImport;
+            this.logs = logs;
         }
     }
 

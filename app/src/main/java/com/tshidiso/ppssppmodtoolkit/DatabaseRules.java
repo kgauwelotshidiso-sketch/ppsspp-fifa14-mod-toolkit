@@ -4,13 +4,14 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** Pure validation and byte-analysis rules for the Phase 1E database lab. */
+/** Pure validation and byte-analysis rules for the Phase 1F database lab. */
 public final class DatabaseRules {
     public static final int MAX_DATABASE_BYTES = 64 * 1024 * 1024;
     public static final int MAX_PATCH_TEXT_BYTES = 128;
@@ -48,6 +49,38 @@ public final class DatabaseRules {
 
     public static boolean isDatabaseAsset(AssetRecord asset) {
         return asset != null && "db".equalsIgnoreCase(asset.getExtension());
+    }
+
+    public static List<String> knownTableMarkers() {
+        return Collections.unmodifiableList(Arrays.asList(KNOWN_TABLE_MARKERS.clone()));
+    }
+
+    public static String requireKnownTableName(String tableName) {
+        String normalized = tableName == null ? "" : tableName.trim().toLowerCase(Locale.US);
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Table name is empty");
+        }
+        if (normalized.length() > 64) {
+            throw new IllegalArgumentException("Table name is too long");
+        }
+        for (int index = 0; index < normalized.length(); index++) {
+            char value = normalized.charAt(index);
+            if (!((value >= 'a' && value <= 'z')
+                    || (value >= '0' && value <= '9')
+                    || value == '_')) {
+                throw new IllegalArgumentException(
+                        "Table name must contain only lowercase letters, digits, or underscores"
+                );
+            }
+        }
+        for (String known : KNOWN_TABLE_MARKERS) {
+            if (known.equals(normalized)) {
+                return normalized;
+            }
+        }
+        throw new IllegalArgumentException(
+                "Unsupported table name. Start with players, teams, or teamplayerlinks"
+        );
     }
 
     public static String detectFormat(byte[] data) {

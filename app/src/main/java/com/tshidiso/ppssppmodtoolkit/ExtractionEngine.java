@@ -1402,7 +1402,7 @@ public final class ExtractionEngine {
         manifest.append("file_bytes=").append(output.fileBytes).append('\n');
         manifest.append("candidate_count=").append(output.candidates.size()).append('\n');
         manifest.append("replacement_enabled=false\n");
-        manifest.append("next_step=Phase 1E database inspection and controlled replacement inside source_working\n");
+        manifest.append("next_step=Phase 1F read-only table decoding and controlled replacement inside source_working\n");
         writeOrReplaceText(resolver, projectUri, "workspace_manifest.txt", manifest.toString());
     }
 
