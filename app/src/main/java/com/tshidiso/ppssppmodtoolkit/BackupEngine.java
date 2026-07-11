@@ -1044,8 +1044,9 @@ public final class BackupEngine {
     private static void deleteQuietly(ContentResolver resolver, Uri uri) {
         try {
             DocumentsContract.deleteDocument(resolver, uri);
-        } catch (RuntimeException ignored) {
-            // Best-effort cleanup only.
+        } catch (IOException | RuntimeException ignored) {
+            // Best-effort cleanup only. The provider may report a checked
+            // FileNotFoundException when the document was already removed.
         }
     }
 
