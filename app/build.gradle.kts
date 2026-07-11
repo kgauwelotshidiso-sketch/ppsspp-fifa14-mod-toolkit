@@ -10,11 +10,24 @@ android {
         applicationId = "com.tshidiso.ppssppmodtoolkit"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-phase1"
+        versionCode = 2
+        versionName = "0.2.0-phase1b"
+    }
+
+    signingConfigs {
+        create("stableDevelopment") {
+            storeFile = rootProject.file("keystore/ppsspp-toolkit-development.p12")
+            storeType = "PKCS12"
+            storePassword = "phase1bdebug"
+            keyAlias = "ppssppmodtoolkitdebug"
+            keyPassword = "phase1bdebug"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("stableDevelopment")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -34,7 +47,6 @@ android {
         checkReleaseBuilds = false
     }
 }
-
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
