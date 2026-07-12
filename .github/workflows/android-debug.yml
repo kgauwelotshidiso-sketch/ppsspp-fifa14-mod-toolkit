@@ -18,7 +18,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Verify Phase 1G source package
+      - name: Verify Phase 1G Hotfix 1 source package
         run: sha256sum -c PHASE1G_CHECKSUMS.sha256
 
       - name: Set up Java 17
@@ -49,7 +49,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: PPSSPP-Mod-Toolkit-Phase1G-debug
+          name: PPSSPP-Mod-Toolkit-Phase1G-Hotfix1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

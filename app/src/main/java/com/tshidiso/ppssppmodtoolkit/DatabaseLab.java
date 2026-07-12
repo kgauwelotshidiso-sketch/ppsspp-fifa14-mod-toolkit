@@ -83,7 +83,7 @@ public final class DatabaseLab {
             }
             String summary = markers.isEmpty()
                     ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1G will not claim a verified schema block. Exact text search remains available."
-                    : "The file was verified and known FIFA table-name markers were detected. Phase 1G verifies table field counts, descriptors, aligned field-name lists, and exact byte offsets while retaining same-length edited copies without touching the working database.";
+                    : "The file was verified and known FIFA table-name markers were detected. Phase 1G verifies descriptor-word counts, independent aligned field-name lists, successor-table boundaries, and exact byte offsets while retaining same-length edited copies without touching the working database.";
             return report(
                     "FIFA database inspection",
                     "Database verified",

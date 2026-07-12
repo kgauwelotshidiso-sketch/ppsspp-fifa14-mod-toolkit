@@ -129,10 +129,11 @@ public final class FifaTableDecoder {
         }
 
         String summary = schemaResult.isVerified()
-                ? "The table schema block was structurally verified read-only: the table hashes, exact "
-                + "field count, one descriptor per field, and the complete aligned field-name list were "
-                + "decoded. Descriptor meanings and row-data boundaries remain unconfirmed, so numeric "
-                + "editing stays disabled."
+                ? "The table schema block was structurally verified read-only against the uploaded "
+                + "ULUS-10655 database profile: table hashes, descriptor-word array, aligned field-name "
+                + "list, and the exact successor-table boundary were decoded separately. Descriptor "
+                + "semantics, descriptor-to-field mapping, and row-data boundaries remain unconfirmed, "
+                + "so numeric editing stays disabled."
                 : "The table marker and surrounding binary structures were mapped read-only. Candidate "
                 + "section boundaries, aligned words, pointer targets, nearby strings, and record-layout "
                 + "hypotheses remain evidence for reverse engineering—not permission to edit records.";
@@ -158,43 +159,56 @@ public final class FifaTableDecoder {
             findings.add("Rejected non-schema table-name occurrence: " + rejected);
         }
         if (!schemaResult.isVerified()) {
-            findings.add("Schema field list: unavailable because no occurrence passed every boundary, "
-                    + "descriptor-count, length-prefix, field-name, and alignment check");
+            findings.add("Schema field list: unavailable because no occurrence passed every verified "
+                    + "length-prefix, descriptor-array, field-name-count, first/last-field, successor-"
+                    + "boundary, and alignment check");
             return;
         }
 
         FifaSchemaDecoder.TableSchema schema = schemaResult.getSchema();
         details.add("Structural schema marker offset: " + formatOffset(schema.getMarkerOffset()));
+        details.add("Table-name length-prefix offset: "
+                + formatOffset(schema.getLengthPrefixOffset()));
         details.add("Aligned schema header offset: " + formatOffset(schema.getHeaderOffset()));
         details.add("Table hash A: " + schema.hashAHex()
                 + " (" + schema.getHashA() + ")");
         details.add("Table hash B: " + schema.hashBHex()
                 + " (" + schema.getHashB() + ")");
-        details.add("Verified field count: " + schema.getFieldCount());
+        details.add("Verified descriptor-word count: " + schema.getDescriptorCount());
+        details.add("Verified field-name count: " + schema.getFieldCount());
         details.add("Descriptor array: " + formatOffset(schema.getDescriptorOffset())
                 + " → " + formatOffset(schema.getDescriptorEndOffset()));
         details.add("Verified schema block end: " + formatOffset(schema.getSchemaEndOffset()));
+        details.add("Verified successor table: " + schema.getSuccessorTableName()
+                + " at " + formatOffset(schema.getSuccessorMarkerOffset()));
 
         int zero = 0;
         int positive = 0;
         int negative = 0;
-        for (FifaSchemaDecoder.FieldDefinition field : schema.getFields()) {
-            if (field.getDescriptor() == 0) {
+        for (int descriptor : schema.getDescriptors()) {
+            if (descriptor == 0) {
                 zero++;
-            } else if (field.getDescriptor() > 0) {
+            } else if (descriptor > 0) {
                 positive++;
             } else {
                 negative++;
             }
         }
-        findings.add("Descriptor distribution: zero=" + zero
+        findings.add("Descriptor-word distribution: zero=" + zero
                 + ", positive=" + positive + ", negative=" + negative
-                + " | descriptor semantics remain UNCONFIRMED");
+                + " | descriptor semantics and field mapping remain UNCONFIRMED");
+        for (int index = 0; index < schema.getDescriptors().size(); index++) {
+            int descriptor = schema.getDescriptors().get(index);
+            findings.add("Descriptor word " + (index + 1) + "/"
+                    + schema.getDescriptorCount() + ": " + descriptor
+                    + " (" + String.format(Locale.US, "0x%08x",
+                    Integer.toUnsignedLong(descriptor)) + ")");
+        }
         for (FifaSchemaDecoder.FieldDefinition field : schema.getFields()) {
-            findings.add("Schema field " + (field.getIndex() + 1) + "/"
+            findings.add("Schema field name " + (field.getIndex() + 1) + "/"
                     + schema.getFieldCount() + ": " + field.getName()
-                    + " | descriptor=" + field.getDescriptor()
-                    + " (" + field.descriptorHex() + ")"
+                    + " | lengthPrefixOffset="
+                    + formatOffset(field.getLengthPrefixOffset())
                     + " | nameOffset=" + formatOffset(field.getNameOffset()));
         }
     }
@@ -580,7 +594,7 @@ public final class FifaTableDecoder {
             List<String> findings
     ) {
         StringBuilder output = new StringBuilder();
-        output.append("PPSSPP Mod Toolkit — Phase 1G verified schema decoder report\n");
+        output.append("PPSSPP Mod Toolkit — Phase 1G Hotfix 1 verified schema decoder report\n");
         output.append("mode=READ_ONLY\n");
         output.append("requested_table=").append(table).append('\n');
         output.append("database_size=").append(data.length).append('\n');

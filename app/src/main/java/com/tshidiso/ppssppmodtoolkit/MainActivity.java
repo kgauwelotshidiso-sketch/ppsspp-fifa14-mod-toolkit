@@ -150,7 +150,7 @@ public final class MainActivity extends Activity {
         });
 
         TextView badge = textView(
-                "PHASE 1G  •  VERIFIED SCHEMA DECODER",
+                "PHASE 1G HOTFIX 1  •  VERIFIED SCHEMA DECODER",
                 12,
                 COLOR_PRIMARY,
                 Typeface.BOLD
@@ -317,7 +317,7 @@ public final class MainActivity extends Activity {
         LinearLayout databaseCard = createCard();
         databaseCard.addView(sectionTitle("6. Decode and inspect FIFA database tables"));
         databaseCard.addView(sectionBody(
-                "Select fifa.db or another .db asset above. Phase 1G verifies the selected database SHA-256, parses the structural table block, confirms the exact field count, pairs one signed descriptor with every aligned field name, and saves the complete read-only report in 90_logs. Descriptor meanings and row editing remain disabled until record storage is proven."
+                "Select fifa.db or another .db asset above. Phase 1G verifies the selected database SHA-256, parses the structural table block, decodes descriptor words and field names as separate arrays, confirms the successor-table boundary, and saves the complete read-only report in 90_logs. Descriptor meanings, descriptor-to-field mapping, and row editing remain disabled until record storage is proven."
         ));
 
         databaseLabStatusView = statusPanel();

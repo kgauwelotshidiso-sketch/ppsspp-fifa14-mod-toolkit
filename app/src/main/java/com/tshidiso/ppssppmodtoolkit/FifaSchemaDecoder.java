@@ -7,17 +7,18 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Read-only parser for the table-schema blocks observed in FIFA 14 PSP fifa.db.
+ * Read-only parser for verified FIFA 14 PSP table-schema blocks.
  *
- * <p>The verified reports supplied from the user's ULUS-10655 database show the same structure for
- * players, teams, and teamplayerlinks: a NUL-delimited table name, zero alignment padding, two
- * 32-bit table hashes, one 32-bit field count, exactly one signed 32-bit descriptor per field, and
- * then one length-prefixed, four-byte-aligned field name per descriptor. This class only accepts a
- * schema when every boundary and every field name validates. It does not interpret descriptor
- * semantics or modify database bytes.</p>
+ * <p>The user's real ULUS-10655 fifa.db proves that the 32-bit value after the two table hashes is
+ * a descriptor-word count, not a field-name count. The descriptor array and the following aligned
+ * field-name list therefore have different lengths. This parser verifies the three initial tables
+ * against their observed descriptor counts, field-name counts, first/last field names, and the
+ * exact structural successor table that terminates each schema block. It never maps descriptor
+ * words to fields and never modifies database bytes.</p>
  */
 public final class FifaSchemaDecoder {
-    private static final int MAX_FIELDS = 512;
+    private static final int MAX_DESCRIPTORS = 512;
+    private static final int MAX_FIELD_NAMES = 512;
     private static final int MAX_FIELD_NAME_BYTES = 96;
     private static final int MAX_REJECTED_OCCURRENCES = 12;
 
@@ -29,6 +30,19 @@ public final class FifaSchemaDecoder {
             throw new IllegalArgumentException("Database is too small for schema decoding");
         }
         String table = DatabaseRules.requireKnownTableName(requestedTable);
+        TableProfile profile = profileFor(table);
+        if (profile == null) {
+            return new SchemaResult(
+                    table,
+                    false,
+                    0,
+                    null,
+                    Collections.singletonList(
+                            "Verified boundary profile is not yet available for table “" + table + "”"
+                    )
+            );
+        }
+
         byte[] needle = table.getBytes(StandardCharsets.US_ASCII);
         byte[] searchable = asciiLower(data);
         List<String> rejected = new ArrayList<>();
@@ -41,7 +55,7 @@ public final class FifaSchemaDecoder {
             }
             occurrenceCount++;
             try {
-                TableSchema schema = parseOccurrence(data, table, markerOffset);
+                TableSchema schema = parseOccurrence(data, profile, markerOffset);
                 return new SchemaResult(
                         table,
                         true,
@@ -60,107 +74,234 @@ public final class FifaSchemaDecoder {
         return new SchemaResult(table, false, occurrenceCount, null, rejected);
     }
 
-    private static TableSchema parseOccurrence(byte[] data, String table, int markerOffset) {
-        int nameLength = table.length();
-        if (markerOffset <= 0 || data[markerOffset - 1] != 0) {
-            throw new IllegalArgumentException("byte before the table name is not NUL");
+    private static TableSchema parseOccurrence(
+            byte[] data,
+            TableProfile profile,
+            int markerOffset
+    ) {
+        int prefixOffset = markerOffset - 2;
+        if (prefixOffset < 0) {
+            throw new IllegalArgumentException("table-name length prefix is missing");
         }
-        int terminatorOffset = markerOffset + nameLength;
-        if (terminatorOffset >= data.length || data[terminatorOffset] != 0) {
-            throw new IllegalArgumentException("table name is not NUL terminated");
+        int encodedLength = readU16Le(data, prefixOffset);
+        if (encodedLength != profile.tableName.length()) {
+            throw new IllegalArgumentException("length prefix " + encodedLength
+                    + " does not match table-name length " + profile.tableName.length());
+        }
+        int nameEnd = markerOffset + profile.tableName.length();
+        if (nameEnd > data.length) {
+            throw new IllegalArgumentException("table name is truncated");
+        }
+        String actualName = new String(
+                data,
+                markerOffset,
+                profile.tableName.length(),
+                StandardCharsets.US_ASCII
+        ).toLowerCase(Locale.US);
+        if (!profile.tableName.equals(actualName)) {
+            throw new IllegalArgumentException("table-name bytes do not match the requested table");
         }
 
-        int headerOffset = alignUp(terminatorOffset + 1, 4);
-        for (int offset = terminatorOffset + 1; offset < headerOffset; offset++) {
-            if (data[offset] != 0) {
-                throw new IllegalArgumentException("nonzero alignment padding follows the table name");
-            }
-        }
+        int headerOffset = alignUp(nameEnd, 4);
+        requireZeroPadding(data, nameEnd, headerOffset, "table name");
         if (headerOffset + 12 > data.length) {
             throw new IllegalArgumentException("schema header is truncated");
         }
 
         long hashA = readU32Le(data, headerOffset);
         long hashB = readU32Le(data, headerOffset + 4);
-        long fieldCountLong = readU32Le(data, headerOffset + 8);
-        if (fieldCountLong < 1L || fieldCountLong > MAX_FIELDS) {
-            throw new IllegalArgumentException("field count is outside 1.." + MAX_FIELDS
-                    + ": " + fieldCountLong);
+        long descriptorCountLong = readU32Le(data, headerOffset + 8);
+        if (descriptorCountLong < 1L || descriptorCountLong > MAX_DESCRIPTORS) {
+            throw new IllegalArgumentException("descriptor-word count is outside 1.."
+                    + MAX_DESCRIPTORS + ": " + descriptorCountLong);
         }
-        int fieldCount = (int) fieldCountLong;
+        int descriptorCount = (int) descriptorCountLong;
+        if (descriptorCount != profile.descriptorCount) {
+            throw new IllegalArgumentException("descriptor-word count " + descriptorCount
+                    + " does not match verified profile " + profile.descriptorCount);
+        }
+
         int descriptorOffset = headerOffset + 12;
-        long descriptorEndLong = (long) descriptorOffset + (long) fieldCount * 4L;
+        long descriptorEndLong = (long) descriptorOffset + (long) descriptorCount * 4L;
         if (descriptorEndLong > data.length) {
             throw new IllegalArgumentException("descriptor array is truncated");
         }
         int descriptorEnd = (int) descriptorEndLong;
-
-        List<Integer> descriptors = new ArrayList<>(fieldCount);
-        for (int index = 0; index < fieldCount; index++) {
+        List<Integer> descriptors = new ArrayList<>(descriptorCount);
+        for (int index = 0; index < descriptorCount; index++) {
             descriptors.add(readS32Le(data, descriptorOffset + index * 4));
         }
 
         int cursor = descriptorEnd;
-        List<FieldDefinition> fields = new ArrayList<>(fieldCount);
-        for (int index = 0; index < fieldCount; index++) {
-            if (cursor + 2 > data.length) {
-                throw new IllegalArgumentException("field-name length " + (index + 1) + " is truncated");
+        List<FieldDefinition> fields = new ArrayList<>(profile.fieldNameCount);
+        if (profile.fieldNameCount < 1 || profile.fieldNameCount > MAX_FIELD_NAMES) {
+            throw new IllegalArgumentException("verified field-name count is invalid");
+        }
+        for (int index = 0; index < profile.fieldNameCount; index++) {
+            NameRecord record = readNameRecord(data, cursor, "field name " + (index + 1));
+            if (profile.successorTable.equals(record.name)) {
+                throw new IllegalArgumentException("successor table appeared before all verified fields");
             }
-            int fieldNameLength = readU16Le(data, cursor);
-            int fieldNameOffset = cursor + 2;
-            if (fieldNameLength < 1 || fieldNameLength > MAX_FIELD_NAME_BYTES) {
-                throw new IllegalArgumentException("field-name length " + (index + 1)
-                        + " is outside 1.." + MAX_FIELD_NAME_BYTES + ": " + fieldNameLength);
-            }
-            int fieldNameEnd = fieldNameOffset + fieldNameLength;
-            if (fieldNameEnd > data.length) {
-                throw new IllegalArgumentException("field name " + (index + 1) + " is truncated");
-            }
-            String name = new String(
-                    data,
-                    fieldNameOffset,
-                    fieldNameLength,
-                    StandardCharsets.US_ASCII
-            );
-            if (!isValidFieldName(name)) {
-                throw new IllegalArgumentException("invalid field name " + (index + 1)
-                        + ": “" + printable(name) + "”");
-            }
-            fields.add(new FieldDefinition(
-                    index,
-                    name,
-                    descriptors.get(index),
-                    cursor,
-                    fieldNameOffset
-            ));
-
-            int nextCursor = alignUp(fieldNameEnd, 4);
-            if (nextCursor > data.length) {
-                throw new IllegalArgumentException("field-name alignment exceeds the database");
-            }
-            for (int padding = fieldNameEnd; padding < nextCursor; padding++) {
-                if (data[padding] != 0) {
-                    throw new IllegalArgumentException("nonzero padding follows field “" + name + "”");
-                }
-            }
-            cursor = nextCursor;
+            fields.add(new FieldDefinition(index, record.name, cursor, cursor + 2));
+            cursor = record.nextOffset;
         }
 
+        if (!profile.firstField.equals(fields.get(0).getName())) {
+            throw new IllegalArgumentException("first field is “" + fields.get(0).getName()
+                    + "”, expected “" + profile.firstField + "”");
+        }
+        if (!profile.lastField.equals(fields.get(fields.size() - 1).getName())) {
+            throw new IllegalArgumentException("last field is “"
+                    + fields.get(fields.size() - 1).getName() + "”, expected “"
+                    + profile.lastField + "”");
+        }
+
+        SuccessorRecord successor = validateSuccessor(data, cursor, profile);
         return new TableSchema(
-                table,
+                profile.tableName,
+                prefixOffset,
                 markerOffset,
                 headerOffset,
                 hashA,
                 hashB,
-                fieldCount,
+                descriptorCount,
                 descriptorOffset,
                 descriptorEnd,
                 cursor,
+                profile.successorTable,
+                successor.markerOffset,
+                descriptors,
                 fields
         );
     }
 
-    private static boolean isValidFieldName(String value) {
+    private static SuccessorRecord validateSuccessor(
+            byte[] data,
+            int prefixOffset,
+            TableProfile profile
+    ) {
+        NameRecord successorName = readNameRecord(data, prefixOffset, "successor table name");
+        if (!profile.successorTable.equals(successorName.name)) {
+            throw new IllegalArgumentException("schema boundary is “" + successorName.name
+                    + "”, expected successor “" + profile.successorTable + "”");
+        }
+        int headerOffset = successorName.nextOffset;
+        if (headerOffset + 12 > data.length) {
+            throw new IllegalArgumentException("successor schema header is truncated");
+        }
+        long hashA = readU32Le(data, headerOffset);
+        long hashB = readU32Le(data, headerOffset + 4);
+        int descriptorCount = checkedDescriptorCount(readU32Le(data, headerOffset + 8));
+        if (hashA == 0L && hashB == 0L) {
+            throw new IllegalArgumentException("successor schema hashes are both zero");
+        }
+        if (descriptorCount != profile.successorDescriptorCount) {
+            throw new IllegalArgumentException("successor descriptor-word count "
+                    + descriptorCount + " does not match verified profile "
+                    + profile.successorDescriptorCount);
+        }
+        long descriptorEndLong = (long) headerOffset + 12L + (long) descriptorCount * 4L;
+        if (descriptorEndLong > data.length) {
+            throw new IllegalArgumentException("successor descriptor array is truncated");
+        }
+        int descriptorEnd = (int) descriptorEndLong;
+        NameRecord firstSuccessorField = readNameRecord(
+                data,
+                descriptorEnd,
+                "first successor field name"
+        );
+        if (!profile.successorFirstField.equals(firstSuccessorField.name)) {
+            throw new IllegalArgumentException("successor first field is “"
+                    + firstSuccessorField.name + "”, expected “"
+                    + profile.successorFirstField + "”");
+        }
+        return new SuccessorRecord(prefixOffset + 2);
+    }
+
+    private static int checkedDescriptorCount(long value) {
+        if (value < 1L || value > MAX_DESCRIPTORS) {
+            throw new IllegalArgumentException("descriptor-word count is outside 1.."
+                    + MAX_DESCRIPTORS + ": " + value);
+        }
+        return (int) value;
+    }
+
+    private static NameRecord readNameRecord(byte[] data, int prefixOffset, String label) {
+        if (prefixOffset < 0 || prefixOffset + 2 > data.length) {
+            throw new IllegalArgumentException(label + " length prefix is truncated");
+        }
+        int length = readU16Le(data, prefixOffset);
+        if (length < 1 || length > MAX_FIELD_NAME_BYTES) {
+            throw new IllegalArgumentException(label + " length is outside 1.."
+                    + MAX_FIELD_NAME_BYTES + ": " + length);
+        }
+        int nameOffset = prefixOffset + 2;
+        int nameEnd = nameOffset + length;
+        if (nameEnd > data.length) {
+            throw new IllegalArgumentException(label + " is truncated");
+        }
+        String name = new String(data, nameOffset, length, StandardCharsets.US_ASCII);
+        if (!isValidIdentifier(name)) {
+            throw new IllegalArgumentException("invalid " + label + ": “"
+                    + printable(name) + "”");
+        }
+        int nextOffset = alignUp(nameEnd, 4);
+        if (nextOffset > data.length) {
+            throw new IllegalArgumentException(label + " alignment exceeds the database");
+        }
+        requireZeroPadding(data, nameEnd, nextOffset, label);
+        return new NameRecord(name, nextOffset);
+    }
+
+    private static void requireZeroPadding(byte[] data, int start, int end, String label) {
+        for (int offset = start; offset < end; offset++) {
+            if (data[offset] != 0) {
+                throw new IllegalArgumentException("nonzero alignment padding follows " + label);
+            }
+        }
+    }
+
+    private static TableProfile profileFor(String table) {
+        switch (table) {
+            case "teams":
+                return new TableProfile(
+                        "teams",
+                        40,
+                        35,
+                        "teamid",
+                        "defdefenderline",
+                        "refereecountrylinks",
+                        3,
+                        "refereeid"
+                );
+            case "teamplayerlinks":
+                return new TableProfile(
+                        "teamplayerlinks",
+                        7,
+                        6,
+                        "teamid",
+                        "transferdone",
+                        "jerseynames",
+                        3,
+                        "playerid"
+                );
+            case "players":
+                return new TableProfile(
+                        "players",
+                        121,
+                        96,
+                        "playerid",
+                        "exportfromdb",
+                        "leagueteamlinks",
+                        3,
+                        "leagueid"
+                );
+            default:
+                return null;
+        }
+    }
+
+    private static boolean isValidIdentifier(String value) {
         if (value == null || value.isEmpty()) {
             return false;
         }
@@ -235,6 +376,55 @@ public final class FifaSchemaDecoder {
         return offset + " (0x" + Integer.toHexString(offset) + ")";
     }
 
+    private static final class TableProfile {
+        final String tableName;
+        final int descriptorCount;
+        final int fieldNameCount;
+        final String firstField;
+        final String lastField;
+        final String successorTable;
+        final int successorDescriptorCount;
+        final String successorFirstField;
+
+        TableProfile(
+                String tableName,
+                int descriptorCount,
+                int fieldNameCount,
+                String firstField,
+                String lastField,
+                String successorTable,
+                int successorDescriptorCount,
+                String successorFirstField
+        ) {
+            this.tableName = tableName;
+            this.descriptorCount = descriptorCount;
+            this.fieldNameCount = fieldNameCount;
+            this.firstField = firstField;
+            this.lastField = lastField;
+            this.successorTable = successorTable;
+            this.successorDescriptorCount = successorDescriptorCount;
+            this.successorFirstField = successorFirstField;
+        }
+    }
+
+    private static final class NameRecord {
+        final String name;
+        final int nextOffset;
+
+        NameRecord(String name, int nextOffset) {
+            this.name = name;
+            this.nextOffset = nextOffset;
+        }
+    }
+
+    private static final class SuccessorRecord {
+        final int markerOffset;
+
+        SuccessorRecord(int markerOffset) {
+            this.markerOffset = markerOffset;
+        }
+    }
+
     public static final class SchemaResult {
         private final String tableName;
         private final boolean verified;
@@ -281,42 +471,58 @@ public final class FifaSchemaDecoder {
 
     public static final class TableSchema {
         private final String tableName;
+        private final int lengthPrefixOffset;
         private final int markerOffset;
         private final int headerOffset;
         private final long hashA;
         private final long hashB;
-        private final int fieldCount;
+        private final int descriptorCount;
         private final int descriptorOffset;
         private final int descriptorEndOffset;
         private final int schemaEndOffset;
+        private final String successorTableName;
+        private final int successorMarkerOffset;
+        private final List<Integer> descriptors;
         private final List<FieldDefinition> fields;
 
         TableSchema(
                 String tableName,
+                int lengthPrefixOffset,
                 int markerOffset,
                 int headerOffset,
                 long hashA,
                 long hashB,
-                int fieldCount,
+                int descriptorCount,
                 int descriptorOffset,
                 int descriptorEndOffset,
                 int schemaEndOffset,
+                String successorTableName,
+                int successorMarkerOffset,
+                List<Integer> descriptors,
                 List<FieldDefinition> fields
         ) {
             this.tableName = tableName;
+            this.lengthPrefixOffset = lengthPrefixOffset;
             this.markerOffset = markerOffset;
             this.headerOffset = headerOffset;
             this.hashA = hashA;
             this.hashB = hashB;
-            this.fieldCount = fieldCount;
+            this.descriptorCount = descriptorCount;
             this.descriptorOffset = descriptorOffset;
             this.descriptorEndOffset = descriptorEndOffset;
             this.schemaEndOffset = schemaEndOffset;
+            this.successorTableName = successorTableName;
+            this.successorMarkerOffset = successorMarkerOffset;
+            this.descriptors = Collections.unmodifiableList(new ArrayList<>(descriptors));
             this.fields = Collections.unmodifiableList(new ArrayList<>(fields));
         }
 
         public String getTableName() {
             return tableName;
+        }
+
+        public int getLengthPrefixOffset() {
+            return lengthPrefixOffset;
         }
 
         public int getMarkerOffset() {
@@ -335,8 +541,12 @@ public final class FifaSchemaDecoder {
             return hashB;
         }
 
+        public int getDescriptorCount() {
+            return descriptorCount;
+        }
+
         public int getFieldCount() {
-            return fieldCount;
+            return fields.size();
         }
 
         public int getDescriptorOffset() {
@@ -349,6 +559,18 @@ public final class FifaSchemaDecoder {
 
         public int getSchemaEndOffset() {
             return schemaEndOffset;
+        }
+
+        public String getSuccessorTableName() {
+            return successorTableName;
+        }
+
+        public int getSuccessorMarkerOffset() {
+            return successorMarkerOffset;
+        }
+
+        public List<Integer> getDescriptors() {
+            return descriptors;
         }
 
         public List<FieldDefinition> getFields() {
@@ -367,20 +589,17 @@ public final class FifaSchemaDecoder {
     public static final class FieldDefinition {
         private final int index;
         private final String name;
-        private final int descriptor;
         private final int lengthPrefixOffset;
         private final int nameOffset;
 
         FieldDefinition(
                 int index,
                 String name,
-                int descriptor,
                 int lengthPrefixOffset,
                 int nameOffset
         ) {
             this.index = index;
             this.name = name;
-            this.descriptor = descriptor;
             this.lengthPrefixOffset = lengthPrefixOffset;
             this.nameOffset = nameOffset;
         }
@@ -393,24 +612,12 @@ public final class FifaSchemaDecoder {
             return name;
         }
 
-        public int getDescriptor() {
-            return descriptor;
-        }
-
-        public long getDescriptorUnsigned() {
-            return Integer.toUnsignedLong(descriptor);
-        }
-
         public int getLengthPrefixOffset() {
             return lengthPrefixOffset;
         }
 
         public int getNameOffset() {
             return nameOffset;
-        }
-
-        public String descriptorHex() {
-            return String.format(Locale.US, "0x%08x", getDescriptorUnsigned());
         }
     }
 }
