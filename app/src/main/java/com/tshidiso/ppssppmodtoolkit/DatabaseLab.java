@@ -26,11 +26,11 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * Phase 1F FIFA database inspection, read-only structural decoding, and safe edited-copy builder.
+ * Phase 1G FIFA database inspection, verified schema decoding, and safe edited-copy builder.
  *
  * <p>This class never edits the selected working database. It creates a complete edited copy in
  * 30_patch_import. Phase 1D then performs its normal staging, rollback-copy, apply, and verification
- * sequence. Phase 1F table decoding writes only a verified text report inside 90_logs.</p>
+ * sequence. Phase 1G schema decoding writes only a verified text report inside 90_logs.</p>
  */
 public final class DatabaseLab {
     private static final int BUFFER_BYTES = 256 * 1024;
@@ -39,7 +39,7 @@ public final class DatabaseLab {
     private static final String PATCH_CONTAINER = "30_patch_import";
     private static final String LOGS_CONTAINER = "90_logs";
     private static final String EDITS_ROOT = "phase1e_database_edits";
-    private static final String DECODER_REPORTS_ROOT = "phase1f_table_decoder_reports";
+    private static final String DECODER_REPORTS_ROOT = "phase1g_schema_decoder_reports";
     private static final String EDIT_MANIFEST = "database_edit_manifest.txt";
 
     private DatabaseLab() {
@@ -82,8 +82,8 @@ public final class DatabaseLab {
                 candidates.add("Table marker: " + marker);
             }
             String summary = markers.isEmpty()
-                    ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1F will not claim a decoded table schema. Exact text search remains available."
-                    : "The file was verified and known FIFA table-name markers were detected. Phase 1F exposes exact byte offsets and builds same-length edited copies without touching the working database.";
+                    ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1G will not claim a verified schema block. Exact text search remains available."
+                    : "The file was verified and known FIFA table-name markers were detected. Phase 1G verifies table field counts, descriptors, aligned field-name lists, and exact byte offsets while retaining same-length edited copies without touching the working database.";
             return report(
                     "FIFA database inspection",
                     "Database verified",
@@ -178,7 +178,7 @@ public final class DatabaseLab {
         List<String> details = new ArrayList<>();
         if (!DatabaseRules.isDatabaseAsset(asset)) {
             return failed(
-                    "FIFA table structure decoder",
+                    "FIFA verified schema decoder",
                     "Database target required",
                     "Select fifa.db or another verified .db working asset first.",
                     details
@@ -201,13 +201,13 @@ public final class DatabaseLab {
                     workspace.logs,
                     DECODER_REPORTS_ROOT
             );
-            String reportName = "table_decoder_"
+            String reportName = "schema_decoder_"
                     + decoded.getTableName()
                     + "_"
                     + newEditId()
                     + ".txt";
             reportFile = createFileExact(resolver, reportsRoot, reportName);
-            String reportText = "phase=1F\n"
+            String reportText = "phase=1G\n"
                     + "database_path_b64=" + b64(asset.getPath()) + "\n"
                     + "database_sha256=" + loaded.sha256 + "\n"
                     + "database_changed=false\n\n"
@@ -217,18 +217,18 @@ public final class DatabaseLab {
                     resolver,
                     reportFile,
                     reportBytes,
-                    "Writing table decoder report",
+                    "Writing schema decoder report",
                     listener
             );
             LoadedBytes verifiedReport = readBytesAndHash(
                     resolver,
                     reportFile,
-                    "Verifying table decoder report",
+                    "Verifying schema decoder report",
                     listener
             );
             if (verifiedReport.bytes.length != reportBytes.length
                     || !sha256(reportBytes).equals(verifiedReport.sha256)) {
-                throw new IOException("Saved table decoder report failed SHA-256 verification");
+                throw new IOException("Saved schema decoder report failed SHA-256 verification");
             }
 
             details.addAll(decoded.getDetails());
@@ -239,9 +239,9 @@ public final class DatabaseLab {
             details.add("Protected original changed: no");
             details.add("ISO and verified backup changed: no");
             ScanReport report = report(
-                    "FIFA table structure decoder",
+                    "FIFA verified schema decoder",
                     decoded.isMarkerFound()
-                            ? "Read-only table probe complete"
+                            ? "Verified schema probe complete"
                             : "Requested marker not found",
                     decoded.getSummary(),
                     details,
@@ -260,8 +260,8 @@ public final class DatabaseLab {
             details.add(safeMessage(error));
             details.add("Working database changed: no");
             return failed(
-                    "FIFA table structure decoder",
-                    "Decode stopped safely",
+                    "FIFA verified schema decoder",
+                    "Schema decode stopped safely",
                     "No working database, protected original, ISO, or verified backup was changed.",
                     details
             );

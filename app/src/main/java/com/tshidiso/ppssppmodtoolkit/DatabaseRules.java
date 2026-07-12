@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** Pure validation and byte-analysis rules for the Phase 1F database lab. */
+/** Pure validation and byte-analysis rules for the Phase 1G database lab. */
 public final class DatabaseRules {
     public static final int MAX_DATABASE_BYTES = 64 * 1024 * 1024;
     public static final int MAX_PATCH_TEXT_BYTES = 128;

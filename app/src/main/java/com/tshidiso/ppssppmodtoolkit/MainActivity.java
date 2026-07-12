@@ -150,7 +150,7 @@ public final class MainActivity extends Activity {
         });
 
         TextView badge = textView(
-                "PHASE 1F  •  READ-ONLY TABLE DECODER",
+                "PHASE 1G  •  VERIFIED SCHEMA DECODER",
                 12,
                 COLOR_PRIMARY,
                 Typeface.BOLD
@@ -167,7 +167,7 @@ public final class MainActivity extends Activity {
         root.addView(title, titleParams);
 
         TextView subtitle = textView(
-                "FIFA 14 PSP scanning, verified backups, read-only binary table mapping, exact text-offset editing, staged full-file replacement, and verified rollback inside the working copy.",
+                "FIFA 14 PSP scanning, verified backups, exact schema-field decoding, read-only binary mapping, staged full-file replacement, and verified rollback inside the working copy.",
                 15,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -317,7 +317,7 @@ public final class MainActivity extends Activity {
         LinearLayout databaseCard = createCard();
         databaseCard.addView(sectionTitle("6. Decode and inspect FIFA database tables"));
         databaseCard.addView(sectionBody(
-                "Select fifa.db or another .db asset above. Phase 1F verifies its current SHA-256, maps known table markers and candidate section offsets, probes aligned values and record-layout hypotheses read-only, and saves a decoder report in 90_logs. Numeric editing remains disabled until a schema is proven."
+                "Select fifa.db or another .db asset above. Phase 1G verifies the selected database SHA-256, parses the structural table block, confirms the exact field count, pairs one signed descriptor with every aligned field name, and saves the complete read-only report in 90_logs. Descriptor meanings and row editing remain disabled until record storage is proven."
         ));
 
         databaseLabStatusView = statusPanel();
@@ -340,7 +340,7 @@ public final class MainActivity extends Activity {
         databaseTableParams.topMargin = dp(10);
         databaseCard.addView(databaseTableInput, databaseTableParams);
 
-        decodeDatabaseTableButton = actionButton("Decode selected table structure — read only", true);
+        decodeDatabaseTableButton = actionButton("Parse verified table schema — read only", true);
         decodeDatabaseTableButton.setOnClickListener(view -> runDatabaseTableDecode());
         databaseCard.addView(decodeDatabaseTableButton, primaryButtonParams());
 
@@ -431,7 +431,7 @@ public final class MainActivity extends Activity {
         LinearLayout patchCard = createCard();
         patchCard.addView(sectionTitle("8. Inspect a mod patch ZIP"));
         patchCard.addView(sectionBody(
-                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1F replacement remains deliberately one exact full file at a time."
+                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1G replacement remains deliberately one exact full file at a time."
         ));
 
         patchStatusView = statusPanel();
@@ -462,7 +462,7 @@ public final class MainActivity extends Activity {
         reportCard.addView(operationStatusView, operationParams);
 
         reportView = textView(
-                "No Phase 1F operation has been run yet.",
+                "No Phase 1G operation has been run yet.",
                 14,
                 COLOR_TEXT,
                 Typeface.NORMAL
@@ -482,7 +482,7 @@ public final class MainActivity extends Activity {
         root.addView(reportCard, cardParams());
 
         TextView footer = textView(
-                "Phase 1F never edits the selected ISO, verified backup, or protected original. Table decoding is read-only and writes only a text report in 90_logs. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
+                "Phase 1G never edits the selected ISO, verified backup, or protected original. Schema decoding is read-only and writes only a text report in 90_logs. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
                 12,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -1125,7 +1125,7 @@ public final class MainActivity extends Activity {
 
         final Uri selectedWorkspace = workspaceProject;
         final String targetPath = selectedPath;
-        setBusy(true, "Decoding table markers and binary layout read-only…");
+        setBusy(true, "Parsing table hashes, descriptors, and aligned field names read-only…");
         operationExecutor.execute(() -> {
             AssetRecord asset = ReplacementEngine.findAsset(
                     getApplicationContext(),
@@ -1151,7 +1151,7 @@ public final class MainActivity extends Activity {
                 setBusy(
                         false,
                         result.isSuccess()
-                                ? "Read-only table decoder report created."
+                                ? "Verified schema decoder report created."
                                 : "Table decode stopped safely."
                 );
                 updateSelectionViews();
@@ -1651,7 +1651,7 @@ public final class MainActivity extends Activity {
                             + selectedAsset.getPath() + "\n"
                             + GameScanner.formatBytes(selectedAsset.getSizeBytes())
                             + " • exact working SHA-256 verified before every operation"
-                            + "\nRead-only table decoder ready for players, teams, and teamplayerlinks"
+                            + "\nVerified schema parser ready for players, teams, and teamplayerlinks"
             );
         } else if (selectedPath != null && selectedPath.toLowerCase(Locale.US).endsWith(".db")) {
             databaseLabStatusView.setText(
@@ -1660,7 +1660,7 @@ public final class MainActivity extends Activity {
             );
         } else {
             databaseLabStatusView.setText(
-                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab and table decoder."
+                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab and schema decoder."
             );
         }
 

@@ -49,6 +49,7 @@ public final class FifaTableDecoder {
                 selected.add(marker);
             }
         }
+        FifaSchemaDecoder.SchemaResult schemaResult = FifaSchemaDecoder.decode(data, table);
 
         List<String> details = new ArrayList<>();
         List<String> findings = new ArrayList<>();
@@ -56,6 +57,7 @@ public final class FifaTableDecoder {
         details.add("Database bytes examined: " + data.length);
         details.add("Known table-marker occurrences: " + markers.size());
         details.add("Unique known table names: " + uniqueMarkerNames(markers).size());
+        appendSchemaEvidence(schemaResult, details, findings);
 
         if (header.valid) {
             details.add("Candidate little-endian header size: " + header.headerBytes
@@ -126,10 +128,14 @@ public final class FifaTableDecoder {
             );
         }
 
-        String summary = "The table marker and surrounding binary structures were mapped read-only. "
-                + "Candidate section boundaries, aligned words, pointer targets, nearby strings, and "
-                + "record-layout hypotheses are evidence for reverse engineering—not yet permission "
-                + "to edit numeric records.";
+        String summary = schemaResult.isVerified()
+                ? "The table schema block was structurally verified read-only: the table hashes, exact "
+                + "field count, one descriptor per field, and the complete aligned field-name list were "
+                + "decoded. Descriptor meanings and row-data boundaries remain unconfirmed, so numeric "
+                + "editing stays disabled."
+                : "The table marker and surrounding binary structures were mapped read-only. Candidate "
+                + "section boundaries, aligned words, pointer targets, nearby strings, and record-layout "
+                + "hypotheses remain evidence for reverse engineering—not permission to edit records.";
         return new DecodeResult(
                 table,
                 true,
@@ -138,6 +144,59 @@ public final class FifaTableDecoder {
                 findings,
                 buildFullReport(data, table, header, markers, selected, details, findings)
         );
+    }
+
+    private static void appendSchemaEvidence(
+            FifaSchemaDecoder.SchemaResult schemaResult,
+            List<String> details,
+            List<String> findings
+    ) {
+        details.add("Verified schema block: " + (schemaResult.isVerified() ? "yes" : "no"));
+        details.add("Exact table-name occurrences examined for schema: "
+                + schemaResult.getOccurrencesExamined());
+        for (String rejected : schemaResult.getRejectedOccurrences()) {
+            findings.add("Rejected non-schema table-name occurrence: " + rejected);
+        }
+        if (!schemaResult.isVerified()) {
+            findings.add("Schema field list: unavailable because no occurrence passed every boundary, "
+                    + "descriptor-count, length-prefix, field-name, and alignment check");
+            return;
+        }
+
+        FifaSchemaDecoder.TableSchema schema = schemaResult.getSchema();
+        details.add("Structural schema marker offset: " + formatOffset(schema.getMarkerOffset()));
+        details.add("Aligned schema header offset: " + formatOffset(schema.getHeaderOffset()));
+        details.add("Table hash A: " + schema.hashAHex()
+                + " (" + schema.getHashA() + ")");
+        details.add("Table hash B: " + schema.hashBHex()
+                + " (" + schema.getHashB() + ")");
+        details.add("Verified field count: " + schema.getFieldCount());
+        details.add("Descriptor array: " + formatOffset(schema.getDescriptorOffset())
+                + " → " + formatOffset(schema.getDescriptorEndOffset()));
+        details.add("Verified schema block end: " + formatOffset(schema.getSchemaEndOffset()));
+
+        int zero = 0;
+        int positive = 0;
+        int negative = 0;
+        for (FifaSchemaDecoder.FieldDefinition field : schema.getFields()) {
+            if (field.getDescriptor() == 0) {
+                zero++;
+            } else if (field.getDescriptor() > 0) {
+                positive++;
+            } else {
+                negative++;
+            }
+        }
+        findings.add("Descriptor distribution: zero=" + zero
+                + ", positive=" + positive + ", negative=" + negative
+                + " | descriptor semantics remain UNCONFIRMED");
+        for (FifaSchemaDecoder.FieldDefinition field : schema.getFields()) {
+            findings.add("Schema field " + (field.getIndex() + 1) + "/"
+                    + schema.getFieldCount() + ": " + field.getName()
+                    + " | descriptor=" + field.getDescriptor()
+                    + " (" + field.descriptorHex() + ")"
+                    + " | nameOffset=" + formatOffset(field.getNameOffset()));
+        }
     }
 
     private static void analyzeOccurrence(
@@ -521,7 +580,7 @@ public final class FifaTableDecoder {
             List<String> findings
     ) {
         StringBuilder output = new StringBuilder();
-        output.append("PPSSPP Mod Toolkit — Phase 1F table decoder report\n");
+        output.append("PPSSPP Mod Toolkit — Phase 1G verified schema decoder report\n");
         output.append("mode=READ_ONLY\n");
         output.append("requested_table=").append(table).append('\n');
         output.append("database_size=").append(data.length).append('\n');
@@ -551,7 +610,7 @@ public final class FifaTableDecoder {
         }
         output.append("\nSAFETY\n");
         output.append("- Candidate sections are inferred from monotonic little-endian offsets only.\n");
-        output.append("- Layout hypotheses are not verified table schemas.\n");
+        output.append("- Field names and one-descriptor-per-field boundaries are structurally verified when reported.\n- Descriptor meanings, record counts, record widths, and row-data sections remain unconfirmed.\n");
         output.append("- No numeric record editing is enabled by this report.\n");
         return output.toString();
     }

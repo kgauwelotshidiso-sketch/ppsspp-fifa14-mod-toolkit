@@ -1,119 +1,101 @@
-# PPSSPP Mod Toolkit — Phase 1F
+# PPSSPP Mod Toolkit — Phase 1G
 
-A native Android toolkit for Android-only PSP game modding, initially focused on FIFA 14 PSP/PPSSPP.
+A native Android toolkit for safe, Android-only FIFA 14 PSP/PPSSPP modding.
 
-## Phase 1F working features
+## Phase 1G working features
 
-Phase 1F keeps all Phase 1A–1E features: source scanning, verified backup, controlled workspace, ISO extraction, exact-path asset indexing, verified working copy, staged full-file replacement, rollback, database fingerprinting, exact text search, and same-length edited-copy generation.
+Phase 1G retains the complete Phase 1A–1F pipeline:
 
-It adds a conservative **read-only FIFA binary table decoder** for the selected working `.db` file.
+- Select and verify a PSP ISO or extracted game folder.
+- Create a full SHA-256-verified backup.
+- Prepare a controlled workspace.
+- Extract and verify the protected original.
+- Create a second verified working copy.
+- Search the exact-path working asset index.
+- Stage, validate, apply, and roll back full-file replacements.
+- Inspect `fifa.db`, search exact text offsets, and build same-length edited copies.
+- Decode conservative section and marker evidence read-only.
 
-### Read-only table decoder
+Phase 1G adds a verified table-schema parser based on the real ULUS-10655 reports for:
 
-The decoder starts with verified FIFA tables such as:
+- `players`
+- `teams`
+- `teamplayerlinks`
 
-```text
-players
-teams
-teamplayerlinks
-```
+## Verified schema structure
 
-It also accepts the other known table markers already recognized by the Database Lab.
+A table occurrence is accepted as a structural schema block only when every boundary validates:
 
-Before decoding, the app:
+1. The table name has a NUL byte immediately before it.
+2. The table name is NUL terminated.
+3. Any alignment bytes before the schema header are zero.
+4. Two 32-bit table hashes are readable.
+5. The 32-bit field count is within a conservative bound.
+6. Exactly one signed 32-bit descriptor exists for every field.
+7. Exactly the declared number of field names can be read.
+8. Every field name is 16-bit length-prefixed, ASCII-safe, and padded with zeroes to the next four-byte boundary.
 
-- resolves the exact selected file only inside `20_working_files/source_working`
-- rechecks file size and SHA-256 against the current working asset index
-- refuses stale asset records
-- keeps the ISO, verified backup, protected original, and working database unchanged
+This rejects ordinary user-facing strings such as “FIFA Career Saved Teams” instead of confusing them with the structural `teams` table.
 
-### Candidate header and section map
+For a verified schema, the report includes:
 
-For compatible EA/FIFA binary databases, Phase 1F:
+- Structural marker offset.
+- Aligned schema-header offset.
+- Both table hashes.
+- Exact field count.
+- Descriptor-array range.
+- Exact schema-block end.
+- Every field name, descriptor value, hexadecimal descriptor, and name offset.
+- Zero/positive/negative descriptor distribution.
+- Existing candidate sections, nearby words, strings, and record-layout hypotheses.
 
-- reads the third little-endian 32-bit header word as a **candidate header-size value** only when it is aligned and within conservative bounds
-- reads the candidate header words without changing the file
-- identifies monotonic in-file offsets
-- maps those offsets into candidate section ranges
-- reports confidence as a structural candidate, not a proven semantic schema
-
-### Table-marker map
-
-The decoder:
-
-- searches known table names case-insensitively
-- requires token boundaries to reduce false substring matches
-- sorts table markers by exact byte offset
-- reports the previous and next known marker
-- maps each marker to the candidate section containing it
-- reports nearby printable strings and a bounded hexadecimal window
-
-### Aligned numeric observations
-
-Around the requested marker, the app reports:
-
-- aligned little-endian 32-bit words
-- zero values
-- values matching candidate section starts
-- possible in-file pointers
-- pointers landing on known markers or printable ASCII
-- small integer/count candidates
-
-These are observations only. No field name or record meaning is claimed without proof.
-
-### Record-layout hypotheses
-
-Phase 1F conservatively tests nearby groups of three aligned 32-bit words as possible:
+Reports are written and SHA-256 verified under:
 
 ```text
-record count
-record size in bytes
-data offset
+90_logs/phase1g_schema_decoder_reports/
 ```
 
-A hypothesis is retained only when:
+## Confirmed from the supplied FIFA 14 USA database reports
 
-- count and record size stay within safety limits
-- multiplication does not overflow
-- calculated record data remains inside the database
-- the candidate data offset is valid
+The user-supplied Phase 1F reports establish a repeatable schema pattern:
 
-Hypotheses are ranked and explicitly labeled **UNCONFIRMED**. The top candidate may show a few raw unsigned 32-bit sample records for comparison. Numeric editing remains disabled.
+- `teams` declares **40** fields.
+- `teamplayerlinks` declares **7** fields.
+- `players` declares **121** fields.
 
-### Verified decoder report
+The schema parser verifies these values from the database itself rather than hard-coding them. It also pairs each field name with the corresponding raw signed descriptor.
 
-Each decoder run creates and reopens a report inside:
+## Safety boundary
 
-```text
-90_logs/phase1f_table_decoder_reports/
-```
+Phase 1G does not interpret descriptor semantics yet. It does not claim that a descriptor is a rating offset, bit width, type code, row position, or foreign key until that meaning is proven against the table data sections.
 
-The report contains:
+The following remain disabled:
 
-- selected database path and verified SHA-256
-- requested table
-- candidate header words and sections
-- complete known-marker map
-- local aligned values and pointer classifications
-- record-layout hypotheses
-- explicit read-only safety statements
+- Numeric player-rating editing.
+- Transfers and team assignment changes.
+- Row insertion or deletion.
+- Record-count changes.
+- Automatic database rebuilding from decoded rows.
 
-The saved report is SHA-256 verified after writing.
-
-### Existing Database Lab editing
-
-Phase 1E same-length text editing remains available, but structural names such as `players`, `teams`, and `teamplayerlinks` must not be edited. A generated edited database still goes through the Phase 1D staging, verified rollback-copy, apply, and rollback pipeline.
-
-## Important limitation
-
-Phase 1F is a structural reverse-engineering step. Candidate section ranges and layout hypotheses are not yet a proven FIFA PSP table schema. The app does not expose numeric field editing, transfers, ratings, IDs, or row insertion until record boundaries and field descriptors are repeatably verified from the user’s real database.
+The selected ISO, verified backup, and protected original remain read-only. Existing full-file apply and rollback operations still target only `20_working_files/source_working`.
 
 ## Build through GitHub Actions
 
-1. Put these files in the root of the repository.
+1. Put the replacement files in the repository root.
 2. Commit and push to `main` or `master`.
 3. Open **Actions** and select **Build Android Debug APK**.
 4. Wait for the green tick.
-5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1F-debug`.
+5. Download the artifact named `PPSSPP-Mod-Toolkit-Phase1G-debug`.
 
 Do not install an APK from a failed or cancelled workflow.
+
+## First Phase 1G test
+
+1. Search `ext:db` in Section 5.
+2. Select `PSP_GAME/USRDIR/data/cmn/fifa.db`.
+3. Enter `teams` in the Section 6 table field.
+4. Tap **Parse verified table schema — read only**.
+5. Confirm the report says `Verified schema block: yes` and `Verified field count: 40`.
+6. Repeat with `teamplayerlinks` and `players`.
+
+The complete reports will contain all field names even when the on-screen report truncates the displayed candidate list.
