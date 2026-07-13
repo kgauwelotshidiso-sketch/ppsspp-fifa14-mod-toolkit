@@ -55,6 +55,9 @@ public final class MainActivity extends Activity {
     private final List<AssetRecord> assetMatches = new ArrayList<>();
     private int assetMatchIndex = -1;
     private AssetRecord selectedAsset;
+    private String databaseRowTable = "";
+    private int databaseRowIndex = -1;
+    private int databaseRowCount = 0;
 
     private TextView sourceStatusView;
     private TextView backupStatusView;
@@ -66,6 +69,7 @@ public final class MainActivity extends Activity {
     private TextView assetBrowserStatusView;
     private TextView selectedAssetStatusView;
     private TextView databaseLabStatusView;
+    private TextView databaseRowStatusView;
     private TextView replacementStatusView;
     private TextView stagedReplacementStatusView;
     private TextView appliedReplacementStatusView;
@@ -89,11 +93,15 @@ public final class MainActivity extends Activity {
     private Button previousAssetButton;
     private Button nextAssetButton;
     private EditText databaseTableInput;
+    private EditText databaseRowQueryInput;
     private EditText databaseSearchInput;
     private EditText databaseReplacementInput;
     private EditText databaseOccurrenceInput;
     private Button inspectDatabaseButton;
     private Button decodeDatabaseTableButton;
+    private Button browseDatabaseRowButton;
+    private Button previousDatabaseRowButton;
+    private Button nextDatabaseRowButton;
     private Button searchDatabaseButton;
     private Button buildDatabaseEditButton;
     private Button chooseReplacementButton;
@@ -150,7 +158,7 @@ public final class MainActivity extends Activity {
         });
 
         TextView badge = textView(
-                "PHASE 1G HOTFIX 1  •  VERIFIED SCHEMA DECODER",
+                "PHASE 1H  •  VERIFIED ROSTER & TEAM BROWSER",
                 12,
                 COLOR_PRIMARY,
                 Typeface.BOLD
@@ -167,7 +175,7 @@ public final class MainActivity extends Activity {
         root.addView(title, titleParams);
 
         TextView subtitle = textView(
-                "FIFA 14 PSP scanning, verified backups, exact schema-field decoding, read-only binary mapping, staged full-file replacement, and verified rollback inside the working copy.",
+                "FIFA 14 PSP scanning, verified backups, exact schema decoding, read-only roster/team browsing, staged full-file replacement, and verified rollback inside the working copy.",
                 15,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -315,9 +323,9 @@ public final class MainActivity extends Activity {
         root.addView(assetCard, cardParams());
 
         LinearLayout databaseCard = createCard();
-        databaseCard.addView(sectionTitle("6. Decode and inspect FIFA database tables"));
+        databaseCard.addView(sectionTitle("6. Decode and browse verified FIFA database rows"));
         databaseCard.addView(sectionBody(
-                "Select fifa.db or another .db asset above. Phase 1G verifies the selected database SHA-256, parses the structural table block, decodes descriptor words and field names as separate arrays, confirms the successor-table boundary, and saves the complete read-only report in 90_logs. Descriptor meanings, descriptor-to-field mapping, and row editing remain disabled until record storage is proven."
+                "Select fifa.db above. Phase 1H retains the verified schema decoder, then validates the real row sections for teams, players, and teamplayerlinks. It resolves stable IDs, name pointers, and player-to-team links read-only. Unresolved packed numeric fields stay raw and numeric editing remains disabled."
         ));
 
         databaseLabStatusView = statusPanel();
@@ -343,6 +351,37 @@ public final class MainActivity extends Activity {
         decodeDatabaseTableButton = actionButton("Parse verified table schema — read only", true);
         decodeDatabaseTableButton.setOnClickListener(view -> runDatabaseTableDecode());
         databaseCard.addView(decodeDatabaseTableButton, primaryButtonParams());
+
+        databaseCard.addView(sectionBody(
+                "Row queries: teams/players accept index:N, id:N, a plain ID, or a name. teamplayerlinks accepts index:N, team:N, or player:N. Empty query opens row 0."
+        ));
+
+        databaseRowStatusView = statusPanel();
+        databaseCard.addView(databaseRowStatusView, secondaryStatusPanelParams());
+
+        databaseRowQueryInput = new EditText(this);
+        databaseRowQueryInput.setTextSize(14);
+        databaseRowQueryInput.setTextColor(COLOR_TEXT);
+        databaseRowQueryInput.setHintTextColor(COLOR_MUTED);
+        databaseRowQueryInput.setHint("Row query: Arsenal, Ryan Giggs, id:241, team:1, index:0");
+        databaseRowQueryInput.setSingleLine(true);
+        databaseRowQueryInput.setPadding(dp(13), dp(12), dp(13), dp(12));
+        databaseRowQueryInput.setBackground(roundedBackground(COLOR_CARD_ALT, COLOR_BORDER, 13));
+        LinearLayout.LayoutParams databaseRowQueryParams = matchWidthWrapHeight();
+        databaseRowQueryParams.topMargin = dp(10);
+        databaseCard.addView(databaseRowQueryInput, databaseRowQueryParams);
+
+        browseDatabaseRowButton = actionButton("Open verified row browser — read only", true);
+        browseDatabaseRowButton.setOnClickListener(view -> runDatabaseRowBrowse(null));
+        databaseCard.addView(browseDatabaseRowButton, primaryButtonParams());
+
+        previousDatabaseRowButton = actionButton("Previous verified row", false);
+        previousDatabaseRowButton.setOnClickListener(view -> browseAdjacentDatabaseRow(-1));
+        databaseCard.addView(previousDatabaseRowButton, buttonParams());
+
+        nextDatabaseRowButton = actionButton("Next verified row", false);
+        nextDatabaseRowButton.setOnClickListener(view -> browseAdjacentDatabaseRow(1));
+        databaseCard.addView(nextDatabaseRowButton, buttonParams());
 
         databaseCard.addView(sectionBody(
                 "The exact-text tools below remain available for same-length literal edits. Do not edit structural table names such as players, teams, or teamplayerlinks."
@@ -431,7 +470,7 @@ public final class MainActivity extends Activity {
         LinearLayout patchCard = createCard();
         patchCard.addView(sectionTitle("8. Inspect a mod patch ZIP"));
         patchCard.addView(sectionBody(
-                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1G replacement remains deliberately one exact full file at a time."
+                "The app checks the ZIP signature, lists likely modding assets, and blocks dangerous parent-folder paths. Phase 1H replacement remains deliberately one exact full file at a time."
         ));
 
         patchStatusView = statusPanel();
@@ -462,7 +501,7 @@ public final class MainActivity extends Activity {
         reportCard.addView(operationStatusView, operationParams);
 
         reportView = textView(
-                "No Phase 1G operation has been run yet.",
+                "No Phase 1H operation has been run yet.",
                 14,
                 COLOR_TEXT,
                 Typeface.NORMAL
@@ -482,7 +521,7 @@ public final class MainActivity extends Activity {
         root.addView(reportCard, cardParams());
 
         TextView footer = textView(
-                "Phase 1G never edits the selected ISO, verified backup, or protected original. Schema decoding is read-only and writes only a text report in 90_logs. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
+                "Phase 1H never edits the selected ISO, verified backup, or protected original. Schema and row browsing are read-only and write only verified text reports in 90_logs. Database editing first creates a separate full file in 30_patch_import; apply and rollback still operate only on the verified working copy and transaction files inside the workspace.",
                 12,
                 COLOR_MUTED,
                 Typeface.NORMAL
@@ -1046,6 +1085,7 @@ public final class MainActivity extends Activity {
         SelectionStore.saveSelectedAssetPath(this, asset == null ? null : asset.getPath());
         if (asset != null && !asset.getPath().equals(previousPath)) {
             SelectionStore.clearStagedReplacement(this);
+            clearDatabaseRowState();
         }
         if (announce && asset != null) {
             reportView.setText(
@@ -1157,6 +1197,108 @@ public final class MainActivity extends Activity {
                 updateSelectionViews();
             });
         });
+    }
+
+    private void runDatabaseRowBrowse(String queryOverride) {
+        Uri workspaceProject = SelectionStore.loadLatestWorkspaceUri(this);
+        String selectedPath = SelectionStore.loadSelectedAssetPath(this);
+        String workingReference = SelectionStore.loadLatestWorkingReference(this);
+        if (workspaceProject == null || workingReference == null || workingReference.trim().isEmpty()) {
+            showToast("Create the verified working copy first.");
+            return;
+        }
+        if (selectedPath == null || selectedPath.trim().isEmpty()) {
+            showToast("Search and select fifa.db first.");
+            return;
+        }
+        final String tableName = databaseTableInput.getText() == null
+                ? ""
+                : databaseTableInput.getText().toString().trim();
+        if (tableName.isEmpty()) {
+            showToast("Enter players, teams, or teamplayerlinks.");
+            return;
+        }
+        final String rowQuery = queryOverride == null
+                ? (databaseRowQueryInput.getText() == null
+                ? ""
+                : databaseRowQueryInput.getText().toString().trim())
+                : queryOverride;
+
+        final Uri selectedWorkspace = workspaceProject;
+        final String targetPath = selectedPath;
+        setBusy(true, "Validating fixed row sections, IDs, names, and team-player links…");
+        operationExecutor.execute(() -> {
+            AssetRecord asset = ReplacementEngine.findAsset(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    targetPath
+            );
+            OperationResult result = DatabaseLab.browseTableRows(
+                    getApplicationContext(),
+                    selectedWorkspace,
+                    asset,
+                    tableName,
+                    rowQuery,
+                    this::showOperationProgress
+            );
+            runOnUiThread(() -> {
+                if (isActivityUnavailable()) {
+                    return;
+                }
+                if (asset != null) {
+                    selectedAsset = asset;
+                    replaceAssetMatch(asset);
+                }
+                if (result.isSuccess()) {
+                    updateDatabaseRowReference(result.getReference());
+                    databaseRowQueryInput.setText("index:" + databaseRowIndex);
+                }
+                reportView.setText(result.getReport().toDisplayText());
+                setBusy(
+                        false,
+                        result.isSuccess()
+                                ? "Verified row resolved read-only."
+                                : "Row browse stopped safely."
+                );
+                updateSelectionViews();
+            });
+        });
+    }
+
+    private void browseAdjacentDatabaseRow(int direction) {
+        String tableName = databaseTableInput.getText() == null
+                ? ""
+                : databaseTableInput.getText().toString().trim().toLowerCase(Locale.US);
+        if (databaseRowIndex < 0 || databaseRowCount <= 0
+                || !tableName.equals(databaseRowTable)) {
+            showToast("Open a verified row for this table first.");
+            return;
+        }
+        int target = databaseRowIndex + direction;
+        if (target < 0 || target >= databaseRowCount) {
+            showToast(direction < 0 ? "Already at the first row." : "Already at the final row.");
+            return;
+        }
+        runDatabaseRowBrowse("index:" + target);
+    }
+
+    private void updateDatabaseRowReference(String reference) {
+        if (reference == null || reference.trim().isEmpty()) {
+            return;
+        }
+        String[] parts = reference.split("\\|", 4);
+        if (parts.length < 3) {
+            return;
+        }
+        try {
+            databaseRowTable = parts[0].trim().toLowerCase(Locale.US);
+            databaseRowIndex = Integer.parseInt(parts[1]);
+            databaseRowCount = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException error) {
+            databaseRowTable = "";
+            databaseRowIndex = -1;
+            databaseRowCount = 0;
+        }
     }
 
     private void runDatabaseTextSearch() {
@@ -1522,12 +1664,19 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void clearDatabaseRowState() {
+        databaseRowTable = "";
+        databaseRowIndex = -1;
+        databaseRowCount = 0;
+    }
+
     private void clearLocalPhase1DState() {
         releaseReadPermission(replacementFileUri);
         replacementFileUri = null;
         selectedAsset = null;
         assetMatches.clear();
         assetMatchIndex = -1;
+        clearDatabaseRowState();
     }
 
     private void clearSourceDependentRecords() {
@@ -1554,6 +1703,7 @@ public final class MainActivity extends Activity {
         selectedAsset = null;
         assetMatches.clear();
         assetMatchIndex = -1;
+        clearDatabaseRowState();
         SelectionStore.clearAll(this);
 
         reportView.setText("Selections and app records cleared. Existing backup/workspace folders on storage were not deleted.");
@@ -1660,8 +1810,24 @@ public final class MainActivity extends Activity {
             );
         } else {
             databaseLabStatusView.setText(
-                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab and schema decoder."
+                    "Select fifa.db or another .db asset in Section 5 to activate the Database Lab, schema decoder, and row browser."
             );
+        }
+
+        if (selectedDatabase && databaseRowIndex >= 0 && databaseRowCount > 0) {
+            databaseRowStatusView.setText(
+                    "Verified row browser\n"
+                            + databaseRowTable + " row " + databaseRowIndex
+                            + " (position " + (databaseRowIndex + 1) + " of "
+                            + databaseRowCount + ")\n"
+                            + "Use Previous/Next or enter another query."
+            );
+        } else if (selectedDatabase) {
+            databaseRowStatusView.setText(
+                    "No verified row open\nEnter a row query or leave it empty to open index:0."
+            );
+        } else {
+            databaseRowStatusView.setText("Select and refresh fifa.db before row browsing.");
         }
 
         if (replacementFileUri != null) {
@@ -1725,6 +1891,14 @@ public final class MainActivity extends Activity {
         nextAssetButton.setEnabled(hasWorkingCopy && assetMatches.size() > 1);
         inspectDatabaseButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         decodeDatabaseTableButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
+        browseDatabaseRowButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
+        previousDatabaseRowButton.setEnabled(
+                hasWorkingCopy && hasSelectedDatabase && databaseRowIndex > 0
+        );
+        nextDatabaseRowButton.setEnabled(
+                hasWorkingCopy && hasSelectedDatabase && databaseRowIndex >= 0
+                        && databaseRowIndex + 1 < databaseRowCount
+        );
         searchDatabaseButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         buildDatabaseEditButton.setEnabled(hasWorkingCopy && hasSelectedDatabase);
         chooseReplacementButton.setEnabled(hasWorkingCopy && hasSelectedAsset);
@@ -1763,6 +1937,7 @@ public final class MainActivity extends Activity {
         chooseReplacementButton.setEnabled(!busy);
         assetSearchInput.setEnabled(!busy);
         databaseTableInput.setEnabled(!busy);
+        databaseRowQueryInput.setEnabled(!busy);
         databaseSearchInput.setEnabled(!busy);
         databaseReplacementInput.setEnabled(!busy);
         databaseOccurrenceInput.setEnabled(!busy);
@@ -1781,6 +1956,9 @@ public final class MainActivity extends Activity {
             nextAssetButton.setEnabled(false);
             inspectDatabaseButton.setEnabled(false);
             decodeDatabaseTableButton.setEnabled(false);
+            browseDatabaseRowButton.setEnabled(false);
+            previousDatabaseRowButton.setEnabled(false);
+            nextDatabaseRowButton.setEnabled(false);
             searchDatabaseButton.setEnabled(false);
             buildDatabaseEditButton.setEnabled(false);
             chooseReplacementButton.setEnabled(false);

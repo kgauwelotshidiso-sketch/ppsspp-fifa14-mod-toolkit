@@ -26,11 +26,11 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * Phase 1G FIFA database inspection, verified schema decoding, and safe edited-copy builder.
+ * Phase 1H FIFA database inspection, verified schema/row decoding, and safe edited-copy builder.
  *
  * <p>This class never edits the selected working database. It creates a complete edited copy in
  * 30_patch_import. Phase 1D then performs its normal staging, rollback-copy, apply, and verification
- * sequence. Phase 1G schema decoding writes only a verified text report inside 90_logs.</p>
+ * sequence. Phase 1G/1H read-only decoding writes only verified text reports inside 90_logs.</p>
  */
 public final class DatabaseLab {
     private static final int BUFFER_BYTES = 256 * 1024;
@@ -40,6 +40,7 @@ public final class DatabaseLab {
     private static final String LOGS_CONTAINER = "90_logs";
     private static final String EDITS_ROOT = "phase1e_database_edits";
     private static final String DECODER_REPORTS_ROOT = "phase1g_schema_decoder_reports";
+    private static final String ROW_BROWSER_REPORTS_ROOT = "phase1h_row_browser_reports";
     private static final String EDIT_MANIFEST = "database_edit_manifest.txt";
 
     private DatabaseLab() {
@@ -82,8 +83,8 @@ public final class DatabaseLab {
                 candidates.add("Table marker: " + marker);
             }
             String summary = markers.isEmpty()
-                    ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1G will not claim a verified schema block. Exact text search remains available."
-                    : "The file was verified and known FIFA table-name markers were detected. Phase 1G verifies descriptor-word counts, independent aligned field-name lists, successor-table boundaries, and exact byte offsets while retaining same-length edited copies without touching the working database.";
+                    ? "The file was verified and fingerprinted. No known table-name marker was found, so Phase 1H will not claim a verified schema block. Exact text search remains available."
+                    : "The file was verified and known FIFA table-name markers were detected. Phase 1H verifies descriptor-word counts, independent aligned field-name lists, successor-table boundaries, and exact byte offsets while retaining same-length edited copies without touching the working database.";
             return report(
                     "FIFA database inspection",
                     "Database verified",
@@ -262,6 +263,109 @@ public final class DatabaseLab {
             return failed(
                     "FIFA verified schema decoder",
                     "Schema decode stopped safely",
+                    "No working database, protected original, ISO, or verified backup was changed.",
+                    details
+            );
+        }
+    }
+
+    public static OperationResult browseTableRows(
+            Context context,
+            Uri workspaceProjectUri,
+            AssetRecord asset,
+            String tableName,
+            String rowQuery,
+            ReplacementEngine.ProgressListener listener
+    ) {
+        List<String> details = new ArrayList<>();
+        if (!DatabaseRules.isDatabaseAsset(asset)) {
+            return failed(
+                    "FIFA verified row browser",
+                    "Database target required",
+                    "Select fifa.db or another verified .db working asset first.",
+                    details
+            );
+        }
+        ContentResolver resolver = context.getContentResolver();
+        Uri reportFile = null;
+        try {
+            notifyProgress(listener, "Reading and verifying selected database", 0L, asset.getSizeBytes());
+            LoadedDatabase loaded = loadVerifiedDatabase(context, workspaceProjectUri, asset, listener);
+            notifyProgress(listener, "Validating row boundaries and cross-table references", 0L,
+                    loaded.bytes.length);
+            FifaRowBrowser.BrowseResult browsed = FifaRowBrowser.browse(
+                    loaded.bytes,
+                    tableName,
+                    rowQuery
+            );
+
+            WorkspacePaths workspace = requireWorkspace(resolver, workspaceProjectUri);
+            Uri reportsRoot = findOrCreateDirectory(
+                    resolver,
+                    workspace.logs,
+                    ROW_BROWSER_REPORTS_ROOT
+            );
+            String reportName = "row_browser_"
+                    + browsed.getTableName()
+                    + "_row_"
+                    + browsed.getSelectedRowIndex()
+                    + "_"
+                    + newEditId()
+                    + ".txt";
+            reportFile = createFileExact(resolver, reportsRoot, reportName);
+            String reportText = "phase=1H\n"
+                    + "database_path_b64=" + b64(asset.getPath()) + "\n"
+                    + "database_sha256=" + loaded.sha256 + "\n"
+                    + "database_changed=false\n\n"
+                    + browsed.getFullReportText();
+            byte[] reportBytes = reportText.getBytes(StandardCharsets.UTF_8);
+            writeBytes(
+                    resolver,
+                    reportFile,
+                    reportBytes,
+                    "Writing verified row-browser report",
+                    listener
+            );
+            LoadedBytes verifiedReport = readBytesAndHash(
+                    resolver,
+                    reportFile,
+                    "Verifying row-browser report",
+                    listener
+            );
+            if (verifiedReport.bytes.length != reportBytes.length
+                    || !sha256(reportBytes).equals(verifiedReport.sha256)) {
+                throw new IOException("Saved row-browser report failed SHA-256 verification");
+            }
+
+            details.addAll(browsed.getDetails());
+            details.add("Database SHA-256 checked before row browse: " + loaded.sha256);
+            details.add("Saved report: 90_logs/" + ROW_BROWSER_REPORTS_ROOT + "/" + reportName);
+            details.add("Saved report SHA-256: " + verifiedReport.sha256);
+            ScanReport report = report(
+                    "FIFA verified row browser",
+                    "Read-only row resolved",
+                    browsed.getSummary(),
+                    details,
+                    browsed.getFindings()
+            );
+            return new OperationResult(
+                    report,
+                    true,
+                    reportFile,
+                    browsed.getTableName()
+                            + "|" + browsed.getSelectedRowIndex()
+                            + "|" + browsed.getRowCount()
+                            + "|" + reportName
+            );
+        } catch (IOException | IllegalArgumentException | SecurityException error) {
+            if (reportFile != null) {
+                deleteQuietly(resolver, reportFile);
+            }
+            details.add(safeMessage(error));
+            details.add("Working database changed: no");
+            return failed(
+                    "FIFA verified row browser",
+                    "Row browse stopped safely",
                     "No working database, protected original, ISO, or verified backup was changed.",
                     details
             );

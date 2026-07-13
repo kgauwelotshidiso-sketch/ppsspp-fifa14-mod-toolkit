@@ -594,7 +594,7 @@ public final class FifaTableDecoder {
             List<String> findings
     ) {
         StringBuilder output = new StringBuilder();
-        output.append("PPSSPP Mod Toolkit — Phase 1G Hotfix 1 verified schema decoder report\n");
+        output.append("PPSSPP Mod Toolkit — Phase 1H verified schema decoder report\n");
         output.append("mode=READ_ONLY\n");
         output.append("requested_table=").append(table).append('\n');
         output.append("database_size=").append(data.length).append('\n');
